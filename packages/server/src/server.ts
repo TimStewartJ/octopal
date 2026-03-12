@@ -36,6 +36,7 @@ export async function createServer({ config, host, port }: ServerOptions) {
     configDir: config.configDir,
     vaultBaseUrl: config.vaultBaseUrl,
     vaultPathPrefix: config.vaultPathPrefix,
+    model: config.model,
   });
   await agent.init();
 

@@ -169,6 +169,7 @@ async function main() {
       configDir: config.configDir,
       vaultBaseUrl: config.vaultBaseUrl,
       vaultPathPrefix: config.vaultPathPrefix,
+      model: config.model,
     });
 
     await agent.init();
@@ -213,6 +214,7 @@ async function main() {
       configDir: config.configDir,
       vaultBaseUrl: config.vaultBaseUrl,
       vaultPathPrefix: config.vaultPathPrefix,
+      model: config.model,
     });
 
     console.log("🐙 Processing your input...\n");

@@ -43,6 +43,8 @@ export interface OctopalUserConfig {
   vaultPathPrefix?: string;
   /** Log level: error, warn, info, debug (default: info) */
   logLevel?: string;
+  /** LLM model to use (default: claude-sonnet-4) */
+  model?: string;
   /** Server configuration */
   server?: ServerConfig;
   /** Scheduler configuration */
@@ -60,6 +62,8 @@ export interface ResolvedConfig {
   vaultBaseUrl?: string;
   vaultPathPrefix?: string;
   logLevel?: string;
+  /** LLM model to use (default: claude-sonnet-4) */
+  model: string;
   server: {
     port: number;
     passwordHash?: string;
@@ -78,6 +82,9 @@ export const CONFIG_TEMPLATE = `# Octopal configuration
 
 # Git remote URL for your PARA vault
 # vaultRemoteUrl = "https://github.com/youruser/octopal-vault.git"
+
+# LLM model to use (default: claude-sonnet-4)
+# model = "claude-sonnet-4"
 
 # Base URL for the web vault viewer (code-server)
 # When set, the agent formats note references as clickable links
@@ -124,6 +131,7 @@ export async function loadConfig(): Promise<ResolvedConfig> {
     configDir: OCTOPAL_DIR,
     configPath: CONFIG_PATH,
     vaultPath: VAULT_DIR,
+    model: "claude-sonnet-4",
     server: {
       port: 3847,
     },
@@ -158,6 +166,9 @@ export async function loadConfig(): Promise<ResolvedConfig> {
   if (process.env.OCTOPAL_LOG_LEVEL) {
     base.logLevel = process.env.OCTOPAL_LOG_LEVEL;
   }
+  if (process.env.OCTOPAL_MODEL) {
+    base.model = process.env.OCTOPAL_MODEL;
+  }
 
   // Discord env var overrides
   const envBotToken = process.env.OCTOPAL_DISCORD_BOT_TOKEN;
@@ -189,6 +200,9 @@ export async function loadConfig(): Promise<ResolvedConfig> {
     }
     if (saved.logLevel) {
       base.logLevel ??= saved.logLevel;
+    }
+    if (saved.model) {
+      base.model = saved.model;
     }
     if (saved.server) {
       base.server.port = saved.server.port ?? base.server.port;

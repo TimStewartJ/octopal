@@ -13,6 +13,8 @@ export interface OctopalConfig {
   vaultBaseUrl?: string;
   /** Absolute path to the vault inside the web viewer (e.g. /home/coder/vault) */
   vaultPathPrefix?: string;
+  /** LLM model to use (default: claude-sonnet-4) */
+  model?: string;
 }
 
 export interface NoteMetadata {

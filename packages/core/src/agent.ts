@@ -198,7 +198,7 @@ export class OctopalAgent {
     });
 
     const session = await this.client.createSession({
-      model: "claude-sonnet-4",
+      model: this.config.model ?? "claude-sonnet-4",
       streaming: true,
       workingDirectory: this.vault.root,
       systemMessage: {
