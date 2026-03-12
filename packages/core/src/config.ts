@@ -1,4 +1,5 @@
 import * as fs from "node:fs/promises";
+import * as fsSync from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import * as TOML from "smol-toml";
@@ -258,5 +259,5 @@ export async function saveConfig(config: OctopalUserConfig): Promise<void> {
 }
 
 export function isConfigured(config: ResolvedConfig): boolean {
-  return !!config.vaultRemoteUrl;
+  return !!config.vaultRemoteUrl || fsSync.existsSync(config.vaultPath);
 }
