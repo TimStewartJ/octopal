@@ -33,6 +33,8 @@ export interface DiscordConfig {
   allowedUsers: string[];
   /** Channel IDs where the bot listens and responds (auto-threads) */
   channels?: string[];
+  /** Guild (server) IDs where the bot listens in all channels */
+  guilds?: string[];
 }
 
 export interface OctopalUserConfig {

@@ -33,6 +33,7 @@ export class DiscordConnector {
   private client: Client;
   private allowedSet: Set<string>;
   private channelSet: Set<string>;
+  private guildSet: Set<string>;
 
   constructor(
     private config: DiscordConfig,
@@ -41,6 +42,7 @@ export class DiscordConnector {
   ) {
     this.allowedSet = new Set(config.allowedUsers);
     this.channelSet = new Set(config.channels ?? []);
+    this.guildSet = new Set(config.guilds ?? []);
     this.client = new Client({
       intents: [
         GatewayIntentBits.DirectMessages,
@@ -100,20 +102,22 @@ export class DiscordConnector {
       return;
     }
 
-    // Thread in a configured channel
+    // Thread in a configured channel or guild
     if (
       channelType === ChannelType.PublicThread ||
       channelType === ChannelType.PrivateThread
     ) {
       const parentId = message.channel.parentId;
-      if (parentId && this.channelSet.has(parentId)) {
+      const inGuild = message.guild && this.guildSet.has(message.guild.id);
+      if (inGuild || (parentId && this.channelSet.has(parentId))) {
         await this.handleThread(message, text);
       }
       return;
     }
 
-    // Message in a configured channel — auto-create thread
-    if (channelType === ChannelType.GuildText && this.channelSet.has(message.channel.id)) {
+    // Message in a configured channel or guild — auto-create thread
+    const inGuild = message.guild && this.guildSet.has(message.guild.id);
+    if (channelType === ChannelType.GuildText && (this.channelSet.has(message.channel.id) || inGuild)) {
       await this.handleChannelMessage(message, text);
       return;
     }
