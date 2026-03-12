@@ -63,6 +63,7 @@ export class VaultManager {
   }
 
   async pull(): Promise<void> {
+    if (!this.config.remoteUrl) return;
     try {
       await this.git("pull", "--rebase", "--autostash");
     } catch (err) {
@@ -88,6 +89,7 @@ export class VaultManager {
       if (!stdout.trim()) return; // nothing to commit
 
       await this.git("commit", "-m", message);
+      if (!this.config.remoteUrl) return; // local-only vault, skip push
       try {
         await this.git("push");
       } catch (err) {
