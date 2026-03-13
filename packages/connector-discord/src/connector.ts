@@ -88,22 +88,13 @@ export class DiscordConnector {
     // Ignore bots
     if (message.author.bot) return;
 
-    log.info(`[debug] Message from ${message.author.id} in guild=${message.guild?.id} channel=${message.channel.id} type=${message.channel.type} content="${message.content.substring(0, 30)}"`);
-
     // Whitelist check
-    if (!this.allowedSet.has(message.author.id)) {
-      log.info(`[debug] User ${message.author.id} not in allowedSet: [${[...this.allowedSet].join(",")}]`);
-      return;
-    }
+    if (!this.allowedSet.has(message.author.id)) return;
 
     const text = message.content.trim();
-    if (!text) {
-      log.info("[debug] Empty message content");
-      return;
-    }
+    if (!text) return;
 
     const channelType = message.channel.type;
-    log.info(`[debug] channelType=${channelType} guildSet=[${[...this.guildSet].join(",")}] channelSet=[${[...this.channelSet].join(",")}]`);
 
     // DM
     if (channelType === ChannelType.DM) {
