@@ -1,6 +1,6 @@
 import { Client, GatewayIntentBits, Partials, ChannelType, type Message } from "discord.js";
 import type { SessionEvent } from "@github/copilot-sdk";
-import { createLogger, type DiscordConfig, type Source } from "@octopal/core";
+import { createLogger, type DiscordConfig, type QueuedAttachment, type Source } from "@octopal/core";
 import { splitMessage } from "./messages.js";
 import { DiscordActivityRenderer, type ActivityChannel } from "./activity.js";
 
@@ -40,6 +40,7 @@ export class DiscordConnector {
     private config: DiscordConfig,
     private sessionStore: ConnectorSessionStore,
     private titleGenerator?: ThreadTitleGenerator,
+    private drainAttachments?: (sessionId: string) => QueuedAttachment[],
   ) {
     this.allowedSet = new Set(config.allowedUsers);
     this.channelSet = new Set(config.channels ?? []);
@@ -84,6 +85,25 @@ export class DiscordConnector {
     this.client.removeAllListeners();
     await this.client.destroy();
     log.info("Disconnected");
+  }
+
+  /** Send any queued attachments for this session */
+  private async sendQueuedAttachments(
+    channel: { send(options: any): Promise<any> },
+    sessionId: string,
+  ): Promise<void> {
+    if (!this.drainAttachments) return;
+    const attachments = this.drainAttachments(sessionId);
+    for (const att of attachments) {
+      try {
+        await channel.send({
+          content: att.caption ?? "",
+          files: [{ attachment: att.path }],
+        });
+      } catch (err) {
+        log.warn(`Failed to send attachment ${att.path}:`, err);
+      }
+    }
   }
 
   private async handleMessage(message: Message): Promise<void> {
@@ -214,6 +234,8 @@ export class DiscordConnector {
         const suffix = isLast && this.mentionOnReply ? `\n\n<@${authorId}>` : "";
         await channel.send(`${chunks[i]}${suffix}`);
       }
+
+      await this.sendQueuedAttachments(channel, sessionId);
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err);
       log.error(`Session ${sessionId} error:`, errMsg);
@@ -257,6 +279,8 @@ export class DiscordConnector {
         const suffix = isLast && this.mentionOnReply ? `\n\n<@${authorId}>` : "";
         await channel.send(`${chunks[i]}${suffix}`);
       }
+
+      await this.sendQueuedAttachments(channel, sessionId);
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err);
       log.error(`Session ${sessionId} error:`, errMsg);

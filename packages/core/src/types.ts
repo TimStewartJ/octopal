@@ -1,3 +1,8 @@
+export interface QueuedAttachment {
+  path: string;
+  caption?: string;
+}
+
 export interface VaultConfig {
   /** Local path to the vault directory */
   localPath: string;

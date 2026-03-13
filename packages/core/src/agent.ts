@@ -17,7 +17,7 @@ import { getRecentDiary } from "./diary.js";
 import { BackgroundTaskManager } from "./background-tasks.js";
 import { TurnSourceCollector } from "./sources.js";
 import { createLogger } from "./log.js";
-import type { OctopalConfig } from "./types.js";
+import type { OctopalConfig, QueuedAttachment } from "./types.js";
 import type { ConnectorRegistryLike } from "./types.js";
 import type { Scheduler } from "./scheduler.js";
 
@@ -36,6 +36,7 @@ export class OctopalAgent {
   readonly backgroundTasks = new BackgroundTaskManager();
   private sessionLoggers = new Map<string, SessionLogger>();
   private sourceCollectors = new Map<string, TurnSourceCollector>();
+  private attachmentQueues = new Map<string, QueuedAttachment[]>();
 
   constructor(private config: OctopalConfig) {
     this.client = new CopilotClient({
@@ -225,6 +226,7 @@ export class OctopalAgent {
           qmd: this.qmd,
           backgroundTasks: this.backgroundTasks,
           getAgent: () => this,
+          getSessionId: () => options?.sessionId,
         }),
         ...(options?.extraTools ?? []),
       ],
@@ -269,11 +271,26 @@ export class OctopalAgent {
   /** Clean up session-scoped resources (logger, source collector) */
   cleanupSession(sessionId: string): void {
     this.sessionLoggers.delete(sessionId);
+    this.attachmentQueues.delete(sessionId);
     const collector = this.sourceCollectors.get(sessionId);
     if (collector) {
       collector.removeAllListeners();
       this.sourceCollectors.delete(sessionId);
     }
+  }
+
+  /** Queue an attachment to be sent with the next response for a session */
+  queueAttachment(sessionId: string, attachment: QueuedAttachment): void {
+    const queue = this.attachmentQueues.get(sessionId) ?? [];
+    queue.push(attachment);
+    this.attachmentQueues.set(sessionId, queue);
+  }
+
+  /** Drain and return all queued attachments for a session */
+  drainAttachments(sessionId: string): QueuedAttachment[] {
+    const queue = this.attachmentQueues.get(sessionId) ?? [];
+    this.attachmentQueues.delete(sessionId);
+    return queue;
   }
 
   /** Send a prompt and wait for the agent to finish processing */

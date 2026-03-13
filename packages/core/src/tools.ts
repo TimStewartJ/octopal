@@ -27,10 +27,12 @@ export interface ToolDeps {
   backgroundTasks?: BackgroundTaskManager;
   /** Agent reference for background task spawning (avoids circular import) */
   getAgent?: () => import("./agent.js").OctopalAgent;
+  /** Current session ID getter for attachment queuing */
+  getSessionId?: () => string | undefined;
 }
 
 /** Build all vault tools as Copilot SDK Tool objects */
-export function buildVaultTools({ vault, para, tasks, client, scheduler, connectors, qmd, backgroundTasks, getAgent }: ToolDeps) {
+export function buildVaultTools({ vault, para, tasks, client, scheduler, connectors, qmd, backgroundTasks, getAgent, getSessionId }: ToolDeps) {
   return [
     defineTool("analyze_input", {
       description:
@@ -619,6 +621,45 @@ export function buildVaultTools({ vault, para, tasks, client, scheduler, connect
         return killed
           ? `Background task ${runId.slice(0, 8)} killed.`
           : `No running background task found with ID ${runId.slice(0, 8)}.`;
+      },
+    }),
+
+    defineTool("send_attachment", {
+      description:
+        "Queue a file to be sent as a Discord attachment with the response. " +
+        "Use this after generating a screenshot, PDF, or any file the user should receive. " +
+        "The file will be attached to your reply message.",
+      parameters: z.object({
+        path: z.string().describe("Absolute path to the file to send"),
+        caption: z.string().optional().describe("Optional caption to send with the file"),
+      }),
+      handler: async ({ path: filePath, caption }: any) => {
+        const agent = getAgent?.();
+        if (!agent) {
+          return "Error: Agent not available.";
+        }
+
+        // Validate file exists
+        const fs = await import("node:fs/promises");
+        try {
+          const stat = await fs.stat(filePath);
+          if (!stat.isFile()) {
+            return `Error: ${filePath} is not a file.`;
+          }
+          // Discord limit: 25MB
+          if (stat.size > 25 * 1024 * 1024) {
+            return `Error: File is too large (${(stat.size / 1024 / 1024).toFixed(1)}MB). Discord limit is 25MB.`;
+          }
+        } catch {
+          return `Error: File not found: ${filePath}`;
+        }
+
+        // Queue for the current session — connector will pick it up
+        const sessionId = getSessionId?.() ?? "__default__";
+        agent.queueAttachment(sessionId, { path: filePath, caption });
+
+        const name = filePath.split("/").pop() ?? filePath;
+        return `✅ Queued "${name}" to send with your response.${caption ? ` Caption: "${caption}"` : ""}`;
       },
     }),
   ];

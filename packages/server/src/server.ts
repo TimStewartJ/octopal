@@ -141,7 +141,12 @@ export async function createServer({ config, host, port }: ServerOptions) {
       },
     };
 
-    const discord = new DiscordConnector(config.discord, sessionStore, titleGenerator);
+    const discord = new DiscordConnector(
+      config.discord,
+      sessionStore,
+      titleGenerator,
+      (sessionId) => agent.drainAttachments(sessionId),
+    );
     await discord.start();
 
     // Wire background task completions to Discord threads/DMs
