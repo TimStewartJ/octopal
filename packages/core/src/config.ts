@@ -232,6 +232,9 @@ export async function loadConfig(): Promise<ResolvedConfig> {
       base.discord.guilds = base.discord.guilds?.length
         ? base.discord.guilds
         : saved.discord.guilds ?? [];
+      if (saved.discord.mentionOnReply !== undefined) {
+        base.discord.mentionOnReply = saved.discord.mentionOnReply;
+      }
     }
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
