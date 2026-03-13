@@ -2,6 +2,7 @@ import { CopilotClient, CopilotSession } from "@github/copilot-sdk";
 import type { SessionEventHandler } from "@github/copilot-sdk";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { VaultManager } from "./vault.js";
 import { buildVaultFileUrl } from "./wikilinks.js";
@@ -268,7 +269,7 @@ export class OctopalAgent {
     return this.sourceCollectors.get(sessionId);
   }
 
-  /** Clean up session-scoped resources (logger, source collector) */
+  /** Clean up session-scoped resources (logger, source collector, browser) */
   cleanupSession(sessionId: string): void {
     this.sessionLoggers.delete(sessionId);
     this.attachmentQueues.delete(sessionId);
@@ -277,6 +278,22 @@ export class OctopalAgent {
       collector.removeAllListeners();
       this.sourceCollectors.delete(sessionId);
     }
+
+    // Close any lingering browser sessions spawned by playwright-cli
+    this.closeBrowser();
+  }
+
+  /** Attempt to close the playwright-cli browser daemon session */
+  private closeBrowser(): void {
+    const playwrightCli = path.resolve(__dirname, "../../../node_modules/.bin/playwright-cli");
+    execFile(playwrightCli, ["close"], { timeout: 5_000 }, (err) => {
+      if (err) {
+        // Also try close-all as fallback
+        execFile(playwrightCli, ["close-all"], { timeout: 5_000 }, () => {});
+      } else {
+        log.info("Browser session closed");
+      }
+    });
   }
 
   /** Queue an attachment to be sent with the next response for a session */
