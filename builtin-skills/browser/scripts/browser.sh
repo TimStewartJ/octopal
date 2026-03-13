@@ -65,10 +65,12 @@ CMD_ARGS=("${EXTRA_ARGS[@]:1}")
 
 # Add persistent profile flags for 'open' command
 if [ "$COMMAND" = "open" ] && [ "$INCOGNITO" = "false" ]; then
+  # Use a separate profile dir to avoid conflict with SDK's default daemon
+  SKILL_PROFILE="${PROFILE_DIR}-skill"
+  mkdir -p "$SKILL_PROFILE"
   # Clear stale lock files from crashed browser sessions
-  rm -f "$PROFILE_DIR/SingletonLock" "$PROFILE_DIR/SingletonCookie" "$PROFILE_DIR/SingletonSocket" 2>/dev/null
-  # Use a named session to avoid conflicting with SDK's default daemon session
-  CMD_ARGS+=("--persistent" "--profile=$PROFILE_DIR" "-s=octopal-browser")
+  rm -f "$SKILL_PROFILE/SingletonLock" "$SKILL_PROFILE/SingletonCookie" "$SKILL_PROFILE/SingletonSocket" 2>/dev/null
+  CMD_ARGS+=("--persistent" "--profile=$SKILL_PROFILE" "-s=octopal-browser")
 fi
 
 # Use named session for all commands (not just open) so they connect to the right session
