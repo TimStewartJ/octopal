@@ -32,10 +32,6 @@ export class SessionStore {
   ): Promise<CopilotSession> {
     const existing = this.sessions.get(sessionId);
     if (existing) {
-      // Re-attach event handler if provided
-      if (options?.onEvent) {
-        existing.on(options.onEvent);
-      }
       return existing;
     }
 
@@ -91,7 +87,12 @@ export class SessionStore {
   ): Promise<{ response: AssistantMessageEvent | undefined; recovered: boolean }> {
     const inactivityMs = options?.inactivityTimeoutMs ?? 300_000;
     const attachments = options?.attachments;
-    const session = await this.getOrCreate(sessionId, { onEvent: options?.onEvent });
+    const session = await this.getOrCreate(sessionId);
+
+    // Attach per-turn event handler, capturing unsubscribe for cleanup
+    const unsubEvent = options?.onEvent
+      ? session.on(options.onEvent)
+      : undefined;
 
     // Subscribe to source collector if callback provided
     const collector = options?.onSource ? this.agent.getSourceCollector(sessionId) : undefined;
@@ -106,6 +107,7 @@ export class SessionStore {
     try {
       const response = await this.sendWithActivityTimeout(session, prompt, inactivityMs, attachments);
       unsubSource?.();
+      unsubEvent?.();
       done();
       return { response, recovered: false };
     } catch (err: unknown) {
@@ -114,8 +116,14 @@ export class SessionStore {
       if (message.includes("Session not found")) {
         log.info(`Session ${sessionId} expired server-side, recreating`);
         unsubSource?.();
+        unsubEvent?.();
         await this.destroy(sessionId);
-        const freshSession = await this.getOrCreate(sessionId, { onEvent: options?.onEvent });
+        const freshSession = await this.getOrCreate(sessionId);
+
+        // Re-attach per-turn event handler on the fresh session
+        const unsubFreshEvent = options?.onEvent
+          ? freshSession.on(options.onEvent)
+          : undefined;
 
         // Re-subscribe to source collector on the fresh session
         const freshCollector = options?.onSource ? this.agent.getSourceCollector(sessionId) : undefined;
@@ -128,6 +136,7 @@ export class SessionStore {
           done();
           return { response, recovered: true };
         } finally {
+          unsubFreshEvent?.();
           if (freshCollector && options?.onSource) {
             freshCollector.removeListener("source", options.onSource);
           }
@@ -138,6 +147,7 @@ export class SessionStore {
       // a stale session from breaking subsequent messages.
       log.warn(`Session ${sessionId} error, destroying: ${message}`);
       unsubSource?.();
+      unsubEvent?.();
       // Flush any incomplete turn data before destroying
       await this.agent.flushSessionLog(sessionId).catch((e) => {
         log.warn("Failed to flush session log on error:", e);
