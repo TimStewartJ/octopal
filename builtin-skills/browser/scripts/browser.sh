@@ -66,14 +66,14 @@ CMD_ARGS=("${EXTRA_ARGS[@]:1}")
 # Add persistent profile flags for 'open' command
 SESSION_NAME="octopal-$$"
 if [ "$COMMAND" = "open" ] && [ "$INCOGNITO" = "false" ]; then
-  mkdir -p "$PROFILE_DIR"
-  rm -f "$PROFILE_DIR/SingletonLock" "$PROFILE_DIR/SingletonCookie" "$PROFILE_DIR/SingletonSocket" 2>/dev/null
-  CMD_ARGS+=("--persistent" "--profile=$PROFILE_DIR" "-s=$SESSION_NAME")
+  # Use /tmp profile to avoid stale state conflicts with SDK daemon
+  PERSIST_DIR="/tmp/octopal-browser-$$"
+  mkdir -p "$PERSIST_DIR"
+  CMD_ARGS+=("--persistent" "--profile=$PERSIST_DIR" "-s=$SESSION_NAME")
 fi
 
-# Use same session name for non-open commands
+# Use same session name for non-open commands — find active session
 if [ "$COMMAND" != "open" ]; then
-  # Find the most recent active session
   ACTIVE_SESSION=$("$PLAYWRIGHT_CLI" list 2>/dev/null | grep "status: open" -B1 | head -1 | sed 's/^- //' | sed 's/://' | tr -d ' ')
   if [ -n "$ACTIVE_SESSION" ]; then
     CMD_ARGS=("-s=$ACTIVE_SESSION" "${CMD_ARGS[@]}")
