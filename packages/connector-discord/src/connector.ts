@@ -143,11 +143,14 @@ export class DiscordConnector {
     return { attachments, tempPaths };
   }
 
-  /** Clean up temp attachment files */
-  private async cleanupTempFiles(paths: string[]): Promise<void> {
-    for (const p of paths) {
-      try { await unlink(p); } catch { /* already deleted */ }
-    }
+  /** Schedule temp file cleanup after a delay (files may still be referenced by the model) */
+  private scheduleTempCleanup(paths: string[], delayMs = 5 * 60 * 1000): void {
+    if (!paths.length) return;
+    setTimeout(async () => {
+      for (const p of paths) {
+        try { await unlink(p); } catch { /* already deleted */ }
+      }
+    }, delayMs);
   }
 
   private async handleMessage(message: Message): Promise<void> {
@@ -169,36 +172,35 @@ export class DiscordConnector {
     // If only attachments with no text, use a descriptive prompt
     const prompt = text || `[User sent ${attachments.length} file(s): ${message.attachments.map((a) => a.name).join(", ")}]`;
 
+    // Clean up temp files after 5 minutes (model may reference them during the turn)
+    this.scheduleTempCleanup(tempPaths);
+
     const channelType = message.channel.type;
 
-    try {
-      // DM
-      if (channelType === ChannelType.DM) {
-        await this.handleDM(message, prompt, attachments);
-        return;
-      }
+    // DM
+    if (channelType === ChannelType.DM) {
+      await this.handleDM(message, prompt, attachments);
+      return;
+    }
 
-      // Thread in a configured channel or guild
-      if (
-        channelType === ChannelType.PublicThread ||
-        channelType === ChannelType.PrivateThread
-      ) {
-        const parentId = message.channel.parentId;
-        const inGuild = message.guild && this.guildSet.has(message.guild.id);
-        if (inGuild || (parentId && this.channelSet.has(parentId))) {
-          await this.handleThread(message, prompt, attachments);
-        }
-        return;
-      }
-
-      // Message in a configured channel or guild — auto-create thread
+    // Thread in a configured channel or guild
+    if (
+      channelType === ChannelType.PublicThread ||
+      channelType === ChannelType.PrivateThread
+    ) {
+      const parentId = message.channel.parentId;
       const inGuild = message.guild && this.guildSet.has(message.guild.id);
-      if (channelType === ChannelType.GuildText && (this.channelSet.has(message.channel.id) || inGuild)) {
-        await this.handleChannelMessage(message, prompt, attachments);
-        return;
+      if (inGuild || (parentId && this.channelSet.has(parentId))) {
+        await this.handleThread(message, prompt, attachments);
       }
-    } finally {
-      await this.cleanupTempFiles(tempPaths);
+      return;
+    }
+
+    // Message in a configured channel or guild — auto-create thread
+    const inGuild = message.guild && this.guildSet.has(message.guild.id);
+    if (channelType === ChannelType.GuildText && (this.channelSet.has(message.channel.id) || inGuild)) {
+      await this.handleChannelMessage(message, prompt, attachments);
+      return;
     }
   }
 
