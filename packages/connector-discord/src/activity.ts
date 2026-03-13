@@ -85,6 +85,7 @@ export class DiscordActivityRenderer {
 
   /** Feed a SessionEvent; renderer decides what to display */
   async onEvent(event: SessionEvent): Promise<void> {
+    if (this.finished) return; // Ignore events after completion
     switch (event.type) {
       case "assistant.intent":
         this.intent = event.data.intent;
@@ -201,6 +202,7 @@ export class DiscordActivityRenderer {
   }
 
   private scheduleUpdate(): void {
+    if (this.finished) return; // Don't schedule updates after completion
     this.dirty = true;
     if (this.editTimer) return;
     this.editTimer = setTimeout(async () => {
