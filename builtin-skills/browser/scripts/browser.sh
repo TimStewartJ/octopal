@@ -67,7 +67,13 @@ CMD_ARGS=("${EXTRA_ARGS[@]:1}")
 if [ "$COMMAND" = "open" ] && [ "$INCOGNITO" = "false" ]; then
   # Clear stale lock files from crashed browser sessions
   rm -f "$PROFILE_DIR/SingletonLock" "$PROFILE_DIR/SingletonCookie" "$PROFILE_DIR/SingletonSocket" 2>/dev/null
-  CMD_ARGS+=("--persistent" "--profile=$PROFILE_DIR")
+  # Use a named session to avoid conflicting with SDK's default daemon session
+  CMD_ARGS+=("--persistent" "--profile=$PROFILE_DIR" "-s=octopal-browser")
+fi
+
+# Use named session for all commands (not just open) so they connect to the right session
+if [ "$COMMAND" != "open" ]; then
+  CMD_ARGS=("-s=octopal-browser" "${CMD_ARGS[@]}")
 fi
 
 # Add headed flag if requested or if DISPLAY is available (e.g. Xvfb/VNC)
