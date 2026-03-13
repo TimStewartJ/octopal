@@ -64,16 +64,20 @@ COMMAND="${EXTRA_ARGS[0]}"
 CMD_ARGS=("${EXTRA_ARGS[@]:1}")
 
 # Add persistent profile flags for 'open' command
+SESSION_NAME="octopal-$$"
 if [ "$COMMAND" = "open" ] && [ "$INCOGNITO" = "false" ]; then
-  # Use a fresh profile dir each session to avoid stale "in use" state
-  SKILL_PROFILE="${PROFILE_DIR}/session-$$"
-  mkdir -p "$SKILL_PROFILE"
-  CMD_ARGS+=("--persistent" "--profile=$SKILL_PROFILE" "-s=octopal-browser")
+  mkdir -p "$PROFILE_DIR"
+  rm -f "$PROFILE_DIR/SingletonLock" "$PROFILE_DIR/SingletonCookie" "$PROFILE_DIR/SingletonSocket" 2>/dev/null
+  CMD_ARGS+=("--persistent" "--profile=$PROFILE_DIR" "-s=$SESSION_NAME")
 fi
 
-# Use named session for all commands (not just open) so they connect to the right session
+# Use same session name for non-open commands
 if [ "$COMMAND" != "open" ]; then
-  CMD_ARGS=("-s=octopal-browser" "${CMD_ARGS[@]}")
+  # Find the most recent active session
+  ACTIVE_SESSION=$("$PLAYWRIGHT_CLI" list 2>/dev/null | grep "status: open" -B1 | head -1 | sed 's/^- //' | sed 's/://' | tr -d ' ')
+  if [ -n "$ACTIVE_SESSION" ]; then
+    CMD_ARGS=("-s=$ACTIVE_SESSION" "${CMD_ARGS[@]}")
+  fi
 fi
 
 # Add headed flag if requested or if DISPLAY is available (e.g. Xvfb/VNC)
