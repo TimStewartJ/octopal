@@ -20,19 +20,20 @@ You can read and write to the user's Notion workspace via `scripts/notion.sh`.
 
 ## Setup
 
-Requires:
-- `NOTION_API_KEY` environment variable set with a Notion integration token
-- Optional: `~/.octopal/notion.json` mapping shorthand names to database IDs
+Requires a Notion API key (create at [notion.so/my-integrations](https://www.notion.so/my-integrations)).
 
-Example `~/.octopal/notion.json`:
+Configure in `~/.octopal/notion.json`:
 ```json
 {
+  "apiKey": "ntn_...",
   "databases": {
     "todo": "abc123-...",
     "projects": "def456-..."
   }
 }
 ```
+
+Alternatively, set `NOTION_API_KEY` as an environment variable (takes precedence over the config file).
 
 ## Core Workflow
 

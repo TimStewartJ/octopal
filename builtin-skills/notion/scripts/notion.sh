@@ -17,8 +17,17 @@
 set -euo pipefail
 
 API_KEY="${NOTION_API_KEY:-}"
+# Fall back to notion.json config if env var not set
+if [ -z "$API_KEY" ] && [ -f "${OCTOPAL_NOTION_CONFIG:-$HOME/.octopal/notion.json}" ]; then
+  API_KEY=$(python3 -c "
+import json
+with open('${OCTOPAL_NOTION_CONFIG:-$HOME/.octopal/notion.json}') as f:
+    cfg = json.load(f)
+print(cfg.get('apiKey', ''), end='')
+" 2>/dev/null)
+fi
 if [ -z "$API_KEY" ]; then
-  echo "Error: NOTION_API_KEY environment variable not set" >&2
+  echo "Error: No Notion API key found. Set NOTION_API_KEY env var or add \"apiKey\" to $HOME/.octopal/notion.json" >&2
   exit 1
 fi
 
