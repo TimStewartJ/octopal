@@ -68,9 +68,11 @@ if [ "$COMMAND" = "open" ] && [ "$INCOGNITO" = "false" ]; then
   CMD_ARGS+=("--persistent" "--profile=$PROFILE_DIR")
 fi
 
-# Add headed flag if requested
-if [ "$HEADED" = "true" ] && [ "$COMMAND" = "open" ]; then
-  CMD_ARGS+=("--headed")
+# Add headed flag if requested or if DISPLAY is available (e.g. Xvfb/VNC)
+if [ "$COMMAND" = "open" ]; then
+  if [ "$HEADED" = "true" ] || [ -n "${DISPLAY:-}" ]; then
+    CMD_ARGS+=("--headed")
+  fi
 fi
 
 # Use chromium browser
