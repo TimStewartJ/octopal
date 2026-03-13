@@ -92,8 +92,14 @@ export class VaultManager {
       if (!this.config.remoteUrl) return; // local-only vault, skip push
       try {
         await this.git("push");
-      } catch (err) {
-        log.warn("git push failed (commit saved locally):", gitError(err));
+      } catch {
+        // Push failed — likely behind remote. Pull and retry once.
+        try {
+          await this.git("pull", "--rebase", "--autostash");
+          await this.git("push");
+        } catch (err) {
+          log.warn("git push failed (commit saved locally):", gitError(err));
+        }
       }
     });
   }
