@@ -88,13 +88,19 @@ for pname, pinfo in sorted(props.items()):
     extra = ''
     if ptype == 'select':
         opts = [o['name'] for o in pinfo.get('select', {}).get('options', [])]
-        if opts: extra = f' [{", ".join(opts)}]'
+        if opts:
+            joined = ', '.join(opts)
+            extra = f' [{joined}]'
     elif ptype == 'multi_select':
         opts = [o['name'] for o in pinfo.get('multi_select', {}).get('options', [])]
-        if opts: extra = f' [{", ".join(opts)}]'
+        if opts:
+            joined = ', '.join(opts)
+            extra = f' [{joined}]'
     elif ptype == 'status':
         opts = [o['name'] for o in pinfo.get('status', {}).get('options', [])]
-        if opts: extra = f' [{", ".join(opts)}]'
+        if opts:
+            joined = ', '.join(opts)
+            extra = f' [{joined}]'
     elif ptype == 'relation':
         rel_db = pinfo.get('relation', {}).get('database_id', '')
         if rel_db: extra = f' -> {rel_db}'
