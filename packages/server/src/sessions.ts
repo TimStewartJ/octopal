@@ -1,5 +1,8 @@
-import type { CopilotSession, SessionEventHandler, AssistantMessageEvent, SessionEvent, Tool } from "@github/copilot-sdk";
+import type { CopilotSession, SessionEventHandler, AssistantMessageEvent, SessionEvent, Tool, MessageOptions } from "@github/copilot-sdk";
 import { createLogger, type OctopalAgent, type Source } from "@octopal/core";
+
+/** SDK-compatible file attachment */
+export type SdkAttachment = NonNullable<MessageOptions["attachments"]>[number];
 
 const log = createLogger("sessions");
 
@@ -80,12 +83,14 @@ export class SessionStore {
     sessionId: string,
     prompt: string,
     options?: {
+      attachments?: SdkAttachment[];
       onEvent?: SessionEventHandler;
       onSource?: (source: Source) => void;
       inactivityTimeoutMs?: number;
     },
   ): Promise<{ response: AssistantMessageEvent | undefined; recovered: boolean }> {
     const inactivityMs = options?.inactivityTimeoutMs ?? 300_000;
+    const attachments = options?.attachments;
     const session = await this.getOrCreate(sessionId, { onEvent: options?.onEvent });
 
     // Subscribe to source collector if callback provided
@@ -99,7 +104,7 @@ export class SessionStore {
 
     const done = log.timed(`sendOrRecover ${sessionId}`, "info");
     try {
-      const response = await this.sendWithActivityTimeout(session, prompt, inactivityMs);
+      const response = await this.sendWithActivityTimeout(session, prompt, inactivityMs, attachments);
       unsubSource?.();
       done();
       return { response, recovered: false };
@@ -119,7 +124,7 @@ export class SessionStore {
         }
 
         try {
-          const response = await this.sendWithActivityTimeout(freshSession, prompt, inactivityMs);
+          const response = await this.sendWithActivityTimeout(freshSession, prompt, inactivityMs, attachments);
           done();
           return { response, recovered: true };
         } finally {
@@ -151,6 +156,7 @@ export class SessionStore {
     session: CopilotSession,
     prompt: string,
     inactivityMs: number,
+    attachments?: SdkAttachment[],
   ): Promise<AssistantMessageEvent | undefined> {
     return new Promise<AssistantMessageEvent | undefined>((resolve, reject) => {
       let timer: ReturnType<typeof setTimeout>;
@@ -186,7 +192,9 @@ export class SessionStore {
       });
 
       resetTimer();
-      session.send({ prompt }).catch((err) => {
+      const sendOptions: MessageOptions = { prompt };
+      if (attachments?.length) sendOptions.attachments = attachments;
+      session.send(sendOptions).catch((err) => {
         cleanup();
         reject(err);
       });

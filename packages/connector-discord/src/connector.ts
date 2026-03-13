@@ -3,6 +3,10 @@ import type { SessionEvent } from "@github/copilot-sdk";
 import { createLogger, type DiscordConfig, type QueuedAttachment, type Source } from "@octopal/core";
 import { splitMessage } from "./messages.js";
 import { DiscordActivityRenderer, type ActivityChannel } from "./activity.js";
+import { writeFile, unlink, mkdir } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { randomUUID } from "node:crypto";
 
 const log = createLogger("discord");
 
@@ -11,12 +15,20 @@ export interface ConnectorSession {
   sendAndWait(message: { prompt: string }, timeoutMs: number): Promise<{ data?: { content?: string } } | undefined>;
 }
 
+/** SDK-compatible file attachment */
+export interface FileAttachment {
+  type: "file";
+  path: string;
+  displayName?: string;
+}
+
 export interface ConnectorSessionStore {
   getOrCreate(sessionId: string): Promise<ConnectorSession>;
   sendOrRecover(
     sessionId: string,
     prompt: string,
     options?: {
+      attachments?: FileAttachment[];
       inactivityTimeoutMs?: number;
       onEvent?: (event: SessionEvent) => void;
       onSource?: (source: Source) => void;
@@ -106,6 +118,38 @@ export class DiscordConnector {
     }
   }
 
+  /** Download Discord message attachments to temp files, returning SDK-compatible attachment objects */
+  private async downloadAttachments(message: Message): Promise<{ attachments: FileAttachment[]; tempPaths: string[] }> {
+    const attachments: FileAttachment[] = [];
+    const tempPaths: string[] = [];
+
+    for (const [, att] of message.attachments) {
+      if (att.size > 25 * 1024 * 1024) continue; // Skip files >25MB
+      try {
+        const resp = await fetch(att.url);
+        if (!resp.ok) continue;
+        const buffer = Buffer.from(await resp.arrayBuffer());
+        const dir = join(tmpdir(), "octopal-attachments");
+        await mkdir(dir, { recursive: true });
+        const tempPath = join(dir, `${randomUUID()}-${att.name}`);
+        await writeFile(tempPath, buffer);
+        attachments.push({ type: "file", path: tempPath, displayName: att.name });
+        tempPaths.push(tempPath);
+      } catch (err) {
+        log.warn(`Failed to download attachment ${att.name}:`, err);
+      }
+    }
+
+    return { attachments, tempPaths };
+  }
+
+  /** Clean up temp attachment files */
+  private async cleanupTempFiles(paths: string[]): Promise<void> {
+    for (const p of paths) {
+      try { await unlink(p); } catch { /* already deleted */ }
+    }
+  }
+
   private async handleMessage(message: Message): Promise<void> {
     // Ignore bots
     if (message.author.bot) return;
@@ -114,55 +158,68 @@ export class DiscordConnector {
     if (!this.allowedSet.has(message.author.id)) return;
 
     const text = message.content.trim();
-    if (!text) return;
+    const hasAttachments = message.attachments.size > 0;
+    if (!text && !hasAttachments) return;
+
+    // Download any attachments to temp files
+    const { attachments, tempPaths } = hasAttachments
+      ? await this.downloadAttachments(message)
+      : { attachments: [], tempPaths: [] };
+
+    // If only attachments with no text, use a descriptive prompt
+    const prompt = text || `[User sent ${attachments.length} file(s): ${message.attachments.map((a) => a.name).join(", ")}]`;
 
     const channelType = message.channel.type;
 
-    // DM
-    if (channelType === ChannelType.DM) {
-      await this.handleDM(message, text);
-      return;
-    }
-
-    // Thread in a configured channel or guild
-    if (
-      channelType === ChannelType.PublicThread ||
-      channelType === ChannelType.PrivateThread
-    ) {
-      const parentId = message.channel.parentId;
-      const inGuild = message.guild && this.guildSet.has(message.guild.id);
-      if (inGuild || (parentId && this.channelSet.has(parentId))) {
-        await this.handleThread(message, text);
+    try {
+      // DM
+      if (channelType === ChannelType.DM) {
+        await this.handleDM(message, prompt, attachments);
+        return;
       }
-      return;
-    }
 
-    // Message in a configured channel or guild — auto-create thread
-    const inGuild = message.guild && this.guildSet.has(message.guild.id);
-    if (channelType === ChannelType.GuildText && (this.channelSet.has(message.channel.id) || inGuild)) {
-      await this.handleChannelMessage(message, text);
-      return;
+      // Thread in a configured channel or guild
+      if (
+        channelType === ChannelType.PublicThread ||
+        channelType === ChannelType.PrivateThread
+      ) {
+        const parentId = message.channel.parentId;
+        const inGuild = message.guild && this.guildSet.has(message.guild.id);
+        if (inGuild || (parentId && this.channelSet.has(parentId))) {
+          await this.handleThread(message, prompt, attachments);
+        }
+        return;
+      }
+
+      // Message in a configured channel or guild — auto-create thread
+      const inGuild = message.guild && this.guildSet.has(message.guild.id);
+      if (channelType === ChannelType.GuildText && (this.channelSet.has(message.channel.id) || inGuild)) {
+        await this.handleChannelMessage(message, prompt, attachments);
+        return;
+      }
+    } finally {
+      await this.cleanupTempFiles(tempPaths);
     }
   }
 
   /** Handle a DM message */
-  private async handleDM(message: Message, text: string): Promise<void> {
+  private async handleDM(message: Message, text: string, attachments: FileAttachment[] = []): Promise<void> {
     const sessionId = `discord-dm-${message.author.id}`;
     const channel = message.channel;
     if (!("send" in channel)) return;
-    await this.replyInChannel(channel, sessionId, text, message.author.id);
+    await this.replyInChannel(channel, sessionId, text, message.author.id, attachments);
   }
 
   /** Handle a message in an existing thread */
-  private async handleThread(message: Message, text: string): Promise<void> {
+  private async handleThread(message: Message, text: string, attachments: FileAttachment[] = []): Promise<void> {
     const sessionId = `discord-th-${message.channel.id}`;
     const channel = message.channel;
     if (!("send" in channel)) return;
-    await this.replyInChannel(channel, sessionId, text, message.author.id);
+    await this.replyInChannel(channel, sessionId, text, message.author.id, attachments);
   }
 
   /** Handle a message in a configured channel — auto-create a thread */
-  private async handleChannelMessage(message: Message, text: string): Promise<void> {
+  private async handleChannelMessage(message: Message, text: string, attachments: FileAttachment[] = []): Promise<void> {
     const channel = message.channel;
 
     // Show typing while generating title + waiting for agent
@@ -196,7 +253,7 @@ export class DiscordConnector {
 
       try {
         const sessionId = `discord-th-${thread.id}`;
-        await this.replyInThread(thread, sessionId, text, message.author.id);
+        await this.replyInThread(thread, sessionId, text, message.author.id, attachments);
       } finally {
         clearInterval(threadTypingInterval);
       }
@@ -211,10 +268,12 @@ export class DiscordConnector {
     sessionId: string,
     text: string,
     authorId: string,
+    attachments: FileAttachment[] = [],
   ): Promise<void> {
     const renderer = new DiscordActivityRenderer(channel as ActivityChannel);
     try {
       const { response, recovered } = await this.sessionStore.sendOrRecover(sessionId, text, {
+        attachments: attachments.length ? attachments : undefined,
         onEvent: (event) => { renderer.onEvent(event).catch(() => {}); },
         onSource: (source) => { renderer.addSource(source); },
       });
@@ -250,6 +309,7 @@ export class DiscordConnector {
     sessionId: string,
     text: string,
     authorId: string,
+    attachments: FileAttachment[] = [],
   ): Promise<void> {
     // Show typing indicator while processing
     const typingInterval = setInterval(() => {
@@ -260,6 +320,7 @@ export class DiscordConnector {
     const renderer = new DiscordActivityRenderer(channel as ActivityChannel);
     try {
       const { response, recovered } = await this.sessionStore.sendOrRecover(sessionId, text, {
+        attachments: attachments.length ? attachments : undefined,
         onEvent: (event) => { renderer.onEvent(event).catch(() => {}); },
         onSource: (source) => { renderer.addSource(source); },
       });
