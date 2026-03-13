@@ -35,6 +35,8 @@ export interface DiscordConfig {
   channels?: string[];
   /** Guild (server) IDs where the bot listens in all channels */
   guilds?: string[];
+  /** Mention (ping) the user when replying. Default: true */
+  mentionOnReply?: boolean;
 }
 
 export interface OctopalUserConfig {

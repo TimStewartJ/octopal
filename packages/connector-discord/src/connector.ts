@@ -34,6 +34,7 @@ export class DiscordConnector {
   private allowedSet: Set<string>;
   private channelSet: Set<string>;
   private guildSet: Set<string>;
+  private mentionOnReply: boolean;
 
   constructor(
     private config: DiscordConfig,
@@ -43,6 +44,7 @@ export class DiscordConnector {
     this.allowedSet = new Set(config.allowedUsers);
     this.channelSet = new Set(config.channels ?? []);
     this.guildSet = new Set(config.guilds ?? []);
+    this.mentionOnReply = config.mentionOnReply ?? true;
     this.client = new Client({
       intents: [
         GatewayIntentBits.DirectMessages,
@@ -209,7 +211,8 @@ export class DiscordConnector {
       const chunks = splitMessage(responseText);
       for (let i = 0; i < chunks.length; i++) {
         const isLast = i === chunks.length - 1;
-        await channel.send(isLast ? `${chunks[i]}\n\n<@${authorId}>` : chunks[i]);
+        const suffix = isLast && this.mentionOnReply ? `\n\n<@${authorId}>` : "";
+        await channel.send(`${chunks[i]}${suffix}`);
       }
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err);
@@ -251,7 +254,8 @@ export class DiscordConnector {
       const chunks = splitMessage(responseText);
       for (let i = 0; i < chunks.length; i++) {
         const isLast = i === chunks.length - 1;
-        await channel.send(isLast ? `${chunks[i]}\n\n<@${authorId}>` : chunks[i]);
+        const suffix = isLast && this.mentionOnReply ? `\n\n<@${authorId}>` : "";
+        await channel.send(`${chunks[i]}${suffix}`);
       }
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err);
