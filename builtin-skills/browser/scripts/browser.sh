@@ -65,6 +65,8 @@ CMD_ARGS=("${EXTRA_ARGS[@]:1}")
 
 # Add persistent profile flags for 'open' command
 if [ "$COMMAND" = "open" ] && [ "$INCOGNITO" = "false" ]; then
+  # Clear stale lock files from crashed browser sessions
+  rm -f "$PROFILE_DIR/SingletonLock" "$PROFILE_DIR/SingletonCookie" "$PROFILE_DIR/SingletonSocket" 2>/dev/null
   CMD_ARGS+=("--persistent" "--profile=$PROFILE_DIR")
 fi
 
