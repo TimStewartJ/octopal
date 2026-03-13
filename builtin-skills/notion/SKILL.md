@@ -12,6 +12,8 @@ metadata:
 
 You can read and write to the user's Notion workspace via `scripts/notion.sh`.
 
+**IMPORTANT:** Always use `scripts/notion.sh` for Notion access. Never use raw `curl` commands or read the API key from `~/.octopal/notion.json` directly — the key is sensitive and must not appear in command output or logs.
+
 ## When to Use
 
 - User asks to check, create, or update items in Notion (tasks, projects, etc.)
