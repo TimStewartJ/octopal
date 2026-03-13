@@ -177,11 +177,13 @@ export async function loadConfig(): Promise<ResolvedConfig> {
   const envBotToken = process.env.OCTOPAL_DISCORD_BOT_TOKEN;
   const envAllowedUsers = process.env.OCTOPAL_DISCORD_ALLOWED_USERS;
   const envChannels = process.env.OCTOPAL_DISCORD_CHANNELS;
+  const envGuilds = process.env.OCTOPAL_DISCORD_GUILDS;
   if (envBotToken) {
     base.discord = {
       botToken: envBotToken,
       allowedUsers: envAllowedUsers ? envAllowedUsers.split(",").map((s) => s.trim()) : [],
       channels: envChannels ? envChannels.split(",").map((s) => s.trim()) : [],
+      guilds: envGuilds ? envGuilds.split(",").map((s) => s.trim()) : [],
     };
   }
 
@@ -217,7 +219,7 @@ export async function loadConfig(): Promise<ResolvedConfig> {
       base.scheduler.tickIntervalSeconds = saved.scheduler.tickIntervalSeconds ?? base.scheduler.tickIntervalSeconds;
     }
     if (saved.discord) {
-      base.discord ??= { botToken: saved.discord.botToken, allowedUsers: [], channels: [] };
+      base.discord ??= { botToken: saved.discord.botToken, allowedUsers: [], channels: [], guilds: [] };
       base.discord.botToken = base.discord.botToken || saved.discord.botToken;
       base.discord.allowedUsers = base.discord.allowedUsers.length
         ? base.discord.allowedUsers
@@ -225,6 +227,9 @@ export async function loadConfig(): Promise<ResolvedConfig> {
       base.discord.channels = base.discord.channels?.length
         ? base.discord.channels
         : saved.discord.channels ?? [];
+      base.discord.guilds = base.discord.guilds?.length
+        ? base.discord.guilds
+        : saved.discord.guilds ?? [];
     }
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
