@@ -69,7 +69,6 @@ if [ "$COMMAND" = "open" ] && [ "$INCOGNITO" = "false" ]; then
   mkdir -p "$PROFILE_DIR"
   # Clean up stale session state that blocks profile reuse
   "$PLAYWRIGHT_CLI" -s="$SESSION_NAME" close 2>/dev/null || true
-  "$PLAYWRIGHT_CLI" -s="$SESSION_NAME" delete-data 2>/dev/null || true
   CMD_ARGS+=("--persistent" "--profile=$PROFILE_DIR" "-s=$SESSION_NAME")
 fi
 
@@ -85,17 +84,11 @@ if [ "$COMMAND" = "open" ]; then
   fi
 fi
 
-# Use chromium browser
+# Use chromium browser — prefer Playwright's bundled Chromium over system installs
 if [ "$COMMAND" = "open" ]; then
   CMD_ARGS+=("--browser=chromium")
-  # Use system Chromium if available (e.g., in Docker/Alpine)
-  if [ -n "${PLAYWRIGHT_MCP_EXECUTABLE_PATH:-}" ]; then
-    : # Already configured via env var — playwright-cli reads it directly
-  elif command -v chromium-browser >/dev/null 2>&1; then
-    export PLAYWRIGHT_MCP_EXECUTABLE_PATH="$(command -v chromium-browser)"
-  elif command -v chromium >/dev/null 2>&1; then
-    export PLAYWRIGHT_MCP_EXECUTABLE_PATH="$(command -v chromium)"
-  fi
+  # Only use system Chromium if explicitly set via env var
+  # (Playwright's own Chromium avoids conflicts with system snap/apt Chromium)
   # Required for running Chromium as root in containers
   if [ "$(id -u)" = "0" ] && [ -z "${PLAYWRIGHT_MCP_NO_SANDBOX:-}" ]; then
     export PLAYWRIGHT_MCP_NO_SANDBOX=true
