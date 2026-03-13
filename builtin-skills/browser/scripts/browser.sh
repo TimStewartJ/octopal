@@ -17,6 +17,17 @@
 
 set -euo pipefail
 
+LOG_DIR="${HOME}/.octopal/logs"
+LOG_FILE="${LOG_DIR}/browser.log"
+mkdir -p "$LOG_DIR"
+
+log() {
+  local ts
+  ts="$(date '+%Y-%m-%d %H:%M:%S')"
+  echo "[$ts] $*" >> "$LOG_FILE"
+  echo "[browser] $*" >&2
+}
+
 PROFILE_DIR="${OCTOPAL_BROWSER_PROFILE:-$HOME/.octopal/browser-profile}"
 PLAYWRIGHT_CLI="$(dirname "$0")/../../../node_modules/.bin/playwright-cli"
 
@@ -68,6 +79,7 @@ SESSION_NAME="octopal"
 if [ "$COMMAND" = "open" ] && [ "$INCOGNITO" = "false" ]; then
   mkdir -p "$PROFILE_DIR"
   # Clean up stale session state that blocks profile reuse
+  log "closing stale session before open"
   "$PLAYWRIGHT_CLI" -s="$SESSION_NAME" close 2>/dev/null || true
   CMD_ARGS+=("--persistent" "--profile=$PROFILE_DIR" "-s=$SESSION_NAME")
 fi
@@ -96,11 +108,17 @@ if [ "$COMMAND" = "open" ]; then
 fi
 
 # Debug output so hangs are diagnosable
-echo "[browser] exec: $PLAYWRIGHT_CLI $COMMAND ${CMD_ARGS[*]}" >&2
+log "exec: $PLAYWRIGHT_CLI $COMMAND ${CMD_ARGS[*]}"
 
 # Check executable-path exists if specified
 if [ -n "${PLAYWRIGHT_MCP_EXECUTABLE_PATH:-}" ] && [ ! -x "$PLAYWRIGHT_MCP_EXECUTABLE_PATH" ]; then
-  echo "[browser] WARNING: $PLAYWRIGHT_MCP_EXECUTABLE_PATH not found or not executable" >&2
+  log "WARNING: $PLAYWRIGHT_MCP_EXECUTABLE_PATH not found or not executable"
+fi
+
+# Rotate log if it gets too large (>1MB)
+if [ -f "$LOG_FILE" ] && [ "$(wc -c < "$LOG_FILE")" -gt 1048576 ]; then
+  mv "$LOG_FILE" "${LOG_FILE}.old"
+  log "rotated log file"
 fi
 
 exec "$PLAYWRIGHT_CLI" "$COMMAND" "${CMD_ARGS[@]}"
