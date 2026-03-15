@@ -189,9 +189,11 @@ export async function createServer({ config, host, port }: ServerOptions) {
     const discordTools = buildDiscordTools({
       client: discord.getClient(),
       channelIds: discord.getChannelIds(),
+      guildIds: discord.getGuildIds(),
       dmChannelIds,
     });
     sessionStore.setExtraTools(discordTools);
+    scheduler.setExtraTools(discordTools);
 
     fastify.addHook("onClose", async () => {
       await discord.stop();

@@ -376,7 +376,7 @@ export class OctopalAgent {
   }
 
   /** One-shot: create a session, send a prompt, get a response, clean up */
-  async run(prompt: string, options?: { onEvent?: SessionEventHandler }): Promise<string> {
+  async run(prompt: string, options?: { onEvent?: SessionEventHandler; extraTools?: import("@github/copilot-sdk").Tool<any>[] }): Promise<string> {
     const session = await this.createSession(options);
     try {
       return await this.sendAndWait(session, prompt);

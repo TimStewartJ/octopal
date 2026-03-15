@@ -79,6 +79,11 @@ export class DiscordConnector {
     return this.channelSet;
   }
 
+  /** Get the set of configured guild IDs */
+  getGuildIds(): Set<string> {
+    return this.guildSet;
+  }
+
   async start(): Promise<void> {
     this.client.on("ready", () => {
       log.info(`Logged in as ${this.client.user?.tag}`);

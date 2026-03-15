@@ -37,12 +37,18 @@ export class Scheduler {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private running = false;
   private executing = false;
+  private extraTools: import("@github/copilot-sdk").Tool<any>[] = [];
 
   constructor(options: SchedulerOptions) {
     this.agent = options.agent;
     this.vault = options.vault;
     this.tickInterval = (options.tickIntervalSeconds ?? 60) * 1000;
     this.enabled = options.enabled ?? true;
+  }
+
+  /** Set extra tools (e.g. Discord) to include in scheduled task sessions */
+  setExtraTools(tools: import("@github/copilot-sdk").Tool<any>[]): void {
+    this.extraTools = tools;
   }
 
   /** Register a builtin schedule (code-defined, non-cancellable) */
@@ -199,7 +205,9 @@ export class Scheduler {
       if (task.prompt.startsWith("__builtin:")) {
         summary = await this.executeBuiltin(task.prompt);
       } else {
-        const response = await this.agent.run(task.prompt);
+        const response = await this.agent.run(task.prompt, {
+          extraTools: this.extraTools,
+        });
         summary = response.slice(0, 500);
       }
       success = true;

@@ -6,23 +6,36 @@ import { splitMessage } from "./messages.js";
 export interface DiscordToolDeps {
   client: Client;
   channelIds: Set<string>;
+  /** Guild IDs the bot is configured to operate in */
+  guildIds: Set<string>;
   /** DM channel IDs the bot has opened (populated at runtime) */
   dmChannelIds: Set<string>;
 }
 
 /** Build Discord-specific tools for the agent */
-export function buildDiscordTools({ client, channelIds, dmChannelIds }: DiscordToolDeps) {
+export function buildDiscordTools({ client, channelIds, guildIds, dmChannelIds }: DiscordToolDeps) {
   /** Check if a channel/thread is allowed for tool access */
   function isAllowed(channelId: string): boolean {
     // Configured channels
     if (channelIds.has(channelId)) return true;
     // DM channels
     if (dmChannelIds.has(channelId)) return true;
-    // Threads whose parent is a configured channel
+    // Check channel/thread membership in configured guilds or channels
     const channel = client.channels.cache.get(channelId);
-    if (channel && (channel.type === ChannelType.PublicThread || channel.type === ChannelType.PrivateThread)) {
-      const parentId = (channel as ThreadChannel).parentId;
-      if (parentId && channelIds.has(parentId)) return true;
+    if (channel) {
+      // Guild text channel in a configured guild
+      if (channel.type === ChannelType.GuildText) {
+        const guildId = (channel as TextChannel).guild?.id;
+        if (guildId && guildIds.has(guildId)) return true;
+      }
+      // Thread whose parent is a configured channel or in a configured guild
+      if (channel.type === ChannelType.PublicThread || channel.type === ChannelType.PrivateThread) {
+        const thread = channel as ThreadChannel;
+        const parentId = thread.parentId;
+        if (parentId && channelIds.has(parentId)) return true;
+        const guildId = thread.guild?.id;
+        if (guildId && guildIds.has(guildId)) return true;
+      }
     }
     return false;
   }
@@ -114,12 +127,9 @@ export function buildDiscordTools({ client, channelIds, dmChannelIds }: DiscordT
         "List all configured Discord channels and their active threads.",
       parameters: z.object({}),
       handler: async () => {
-        if (channelIds.size === 0) {
-          return "No Discord channels are configured.";
-        }
-
         const sections: string[] = [];
 
+        // List explicitly configured channels
         for (const id of channelIds) {
           const channel = await client.channels.fetch(id).catch(() => null);
           if (!channel) {
@@ -145,6 +155,36 @@ export function buildDiscordTools({ client, channelIds, dmChannelIds }: DiscordT
           } else {
             sections.push(`- ${id} (type: ${channel.type})`);
           }
+        }
+
+        // List channels from configured guilds (if no explicit channels)
+        if (channelIds.size === 0 && guildIds.size > 0) {
+          for (const guildId of guildIds) {
+            const guild = client.guilds.cache.get(guildId);
+            if (!guild) {
+              sections.push(`- Guild ${guildId} (not cached)`);
+              continue;
+            }
+            sections.push(`**${guild.name}** (guild ${guildId}):`);
+            const textChannels = guild.channels.cache.filter(
+              (c) => c.type === ChannelType.GuildText,
+            );
+            for (const [, ch] of textChannels) {
+              const tc = ch as TextChannel;
+              let line = `- **#${tc.name}** (${tc.id})`;
+              if (tc.topic) line += ` — ${tc.topic}`;
+              sections.push(line);
+
+              const threads = tc.threads.cache.filter((t) => !t.archived);
+              for (const [, thread] of threads) {
+                sections.push(`  - 🧵 **${thread.name}** (${thread.id})`);
+              }
+            }
+          }
+        }
+
+        if (sections.length === 0) {
+          return "No Discord channels or guilds are configured.";
         }
 
         return sections.join("\n");
