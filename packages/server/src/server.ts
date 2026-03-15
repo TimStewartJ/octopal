@@ -201,10 +201,9 @@ export async function createServer({ config, host, port }: ServerOptions) {
   // Start the scheduler
   await scheduler.start();
 
-  // Graceful cleanup
+  // Graceful cleanup — don't destroy sessions so they can be resumed after restart
   fastify.addHook("onClose", async () => {
     scheduler.stop();
-    await sessionStore.destroyAll();
     await agent.stop();
   });
 

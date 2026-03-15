@@ -25,7 +25,7 @@ export class SessionStore {
     this.extraTools = tools;
   }
 
-  /** Get an existing session or create a new one */
+  /** Get an existing session, resume from disk, or create a new one */
   async getOrCreate(
     sessionId: string,
     options?: { onEvent?: SessionEventHandler },
@@ -35,11 +35,22 @@ export class SessionStore {
       return existing;
     }
 
-    // Create a new persistent session
+    // Try to resume from disk first (survives server restarts)
+    try {
+      const session = await this.agent.resumeSession({
+        sessionId,
+        extraTools: this.extraTools,
+      });
+      this.sessions.set(sessionId, session);
+      log.info(`Session ${sessionId} resumed from disk`);
+      return session;
+    } catch {
+      // No prior session on disk — create fresh
+    }
+
     const session = await this.agent.createSession({
       sessionId,
       infiniteSessions: true,
-      onEvent: options?.onEvent,
       extraTools: this.extraTools,
     });
 
