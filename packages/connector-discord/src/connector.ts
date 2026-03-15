@@ -158,6 +158,29 @@ export class DiscordConnector {
     }, delayMs);
   }
 
+  /** Build a context prefix when the user replies to a specific message */
+  private async buildReplyContext(message: Message): Promise<string> {
+    if (!message.reference?.messageId) return "";
+
+    try {
+      const channel = message.channel;
+      if (!("messages" in channel)) return "";
+
+      const referenced = await (channel as any).messages.fetch(message.reference.messageId);
+      if (!referenced) return "";
+
+      const author = referenced.author.bot
+        ? `🤖 ${referenced.author.username}`
+        : referenced.author.username;
+      const content = referenced.content?.slice(0, 500) || "(no text content)";
+      const timestamp = referenced.createdAt.toISOString().slice(0, 16).replace("T", " ");
+
+      return `[Replying to ${author} at ${timestamp}: "${content}"]\n\n`;
+    } catch {
+      return "";
+    }
+  }
+
   private async handleMessage(message: Message): Promise<void> {
     // Ignore bots
     if (message.author.bot) return;
@@ -175,7 +198,11 @@ export class DiscordConnector {
       : { attachments: [], tempPaths: [] };
 
     // If only attachments with no text, use a descriptive prompt
-    const prompt = text || `[User sent ${attachments.length} file(s): ${message.attachments.map((a) => a.name).join(", ")}]`;
+    const basePrompt = text || `[User sent ${attachments.length} file(s): ${message.attachments.map((a) => a.name).join(", ")}]`;
+
+    // Enrich with reply context if the user replied to a specific message
+    const replyContext = await this.buildReplyContext(message);
+    const prompt = replyContext + basePrompt;
 
     // Clean up temp files after 5 minutes (model may reference them during the turn)
     this.scheduleTempCleanup(tempPaths);
