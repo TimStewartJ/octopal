@@ -253,6 +253,59 @@ export class OctopalAgent {
     return session;
   }
 
+  /** Resume an existing session, restoring conversation history from disk.
+   *  Re-registers tools and hooks (these are in-memory callbacks that can't be serialized). */
+  async resumeSession(options: {
+    sessionId: string;
+    onEvent?: SessionEventHandler;
+    extraTools?: import("@github/copilot-sdk").Tool<any>[];
+  }): Promise<CopilotSession> {
+    const knowledgeOps: KnowledgeOperation[] = [];
+    const sourceCollector = new TurnSourceCollector();
+
+    const logger = new SessionLogger(this.vault, options.sessionId);
+
+    const hooks = buildSessionHooks({
+      client: this.client,
+      vault: this.vault,
+      qmd: this.qmd,
+      knowledgeOps,
+      logger,
+      backgroundTasks: this.backgroundTasks,
+      sessionId: options.sessionId,
+      sourceCollector,
+    });
+
+    const session = await this.client.resumeSession(options.sessionId, {
+      tools: [
+        ...buildVaultTools({
+          vault: this.vault,
+          para: this.para,
+          tasks: this.tasks,
+          client: this.client,
+          scheduler: this.scheduler,
+          connectors: this.connectors,
+          qmd: this.qmd,
+          backgroundTasks: this.backgroundTasks,
+          getAgent: () => this,
+          getSessionId: () => options.sessionId,
+        }),
+        ...(options.extraTools ?? []),
+      ],
+      hooks,
+    });
+
+    if (options.onEvent) {
+      session.on(options.onEvent);
+    }
+
+    logger.attach(session);
+    this.sessionLoggers.set(options.sessionId, logger);
+    this.sourceCollectors.set(options.sessionId, sourceCollector);
+
+    return session;
+  }
+
   /**
    * Flush any incomplete turn data for a session's logger.
    * Call this before destroying a session on timeout/error.

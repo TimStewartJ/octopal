@@ -114,31 +114,65 @@ export class SessionStore {
       const message = err instanceof Error ? err.message : String(err);
 
       if (message.includes("Session not found")) {
-        log.info(`Session ${sessionId} expired server-side, recreating`);
+        log.info(`Session ${sessionId} expired server-side, attempting resume`);
         unsubSource?.();
         unsubEvent?.();
-        await this.destroy(sessionId);
-        const freshSession = await this.getOrCreate(sessionId);
+        // Remove stale reference but do NOT destroy — preserve events.jsonl on disk
+        this.sessions.delete(sessionId);
+        this.agent.cleanupSession(sessionId);
 
-        // Re-attach per-turn event handler on the fresh session
-        const unsubFreshEvent = options?.onEvent
-          ? freshSession.on(options.onEvent)
-          : undefined;
-
-        // Re-subscribe to source collector on the fresh session
-        const freshCollector = options?.onSource ? this.agent.getSourceCollector(sessionId) : undefined;
-        if (freshCollector && options?.onSource) {
-          freshCollector.on("source", options.onSource);
-        }
-
+        // Try resuming the session (restores conversation history from disk)
         try {
-          const response = await this.sendWithActivityTimeout(freshSession, prompt, inactivityMs, attachments);
-          done();
-          return { response, recovered: true };
-        } finally {
-          unsubFreshEvent?.();
+          const resumed = await this.agent.resumeSession({
+            sessionId,
+            extraTools: this.extraTools,
+          });
+          this.sessions.set(sessionId, resumed);
+          log.info(`Session ${sessionId} resumed successfully`);
+
+          const unsubResumedEvent = options?.onEvent
+            ? resumed.on(options.onEvent)
+            : undefined;
+          const resumedCollector = options?.onSource ? this.agent.getSourceCollector(sessionId) : undefined;
+          if (resumedCollector && options?.onSource) {
+            resumedCollector.on("source", options.onSource);
+          }
+
+          try {
+            const response = await this.sendWithActivityTimeout(resumed, prompt, inactivityMs, attachments);
+            done();
+            return { response, recovered: false }; // History preserved — not a reset
+          } finally {
+            unsubResumedEvent?.();
+            if (resumedCollector && options?.onSource) {
+              resumedCollector.removeListener("source", options.onSource);
+            }
+          }
+        } catch (resumeErr) {
+          // Resume failed — fall back to fresh session
+          log.warn(`Session ${sessionId} resume failed, creating fresh:`, resumeErr instanceof Error ? resumeErr.message : resumeErr);
+          this.sessions.delete(sessionId);
+          this.agent.cleanupSession(sessionId);
+
+          const freshSession = await this.getOrCreate(sessionId);
+
+          const unsubFreshEvent = options?.onEvent
+            ? freshSession.on(options.onEvent)
+            : undefined;
+          const freshCollector = options?.onSource ? this.agent.getSourceCollector(sessionId) : undefined;
           if (freshCollector && options?.onSource) {
-            freshCollector.removeListener("source", options.onSource);
+            freshCollector.on("source", options.onSource);
+          }
+
+          try {
+            const response = await this.sendWithActivityTimeout(freshSession, prompt, inactivityMs, attachments);
+            done();
+            return { response, recovered: true }; // Actual reset — history lost
+          } finally {
+            unsubFreshEvent?.();
+            if (freshCollector && options?.onSource) {
+              freshCollector.removeListener("source", options.onSource);
+            }
           }
         }
       }
