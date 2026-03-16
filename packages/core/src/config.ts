@@ -33,6 +33,8 @@ export interface DiscordConfig {
   allowedUsers: string[];
   /** Channel IDs where the bot listens and responds (auto-threads) */
   channels?: string[];
+  /** Channel IDs where the bot uses persistent inline sessions (no threads) */
+  persistentChannels?: string[];
   /** Guild (server) IDs where the bot listens in all channels */
   guilds?: string[];
   /** Mention (ping) the user when replying. Default: true */
@@ -129,6 +131,9 @@ export const CONFIG_TEMPLATE = `# Octopal configuration
 
 # Channel IDs where the bot listens and responds (creates threads automatically)
 # channels = []
+
+# Channel IDs where the bot uses persistent inline sessions (no threads)
+# persistentChannels = []
 `;
 
 export async function loadConfig(): Promise<ResolvedConfig> {
@@ -179,12 +184,14 @@ export async function loadConfig(): Promise<ResolvedConfig> {
   const envBotToken = process.env.OCTOPAL_DISCORD_BOT_TOKEN;
   const envAllowedUsers = process.env.OCTOPAL_DISCORD_ALLOWED_USERS;
   const envChannels = process.env.OCTOPAL_DISCORD_CHANNELS;
+  const envPersistentChannels = process.env.OCTOPAL_DISCORD_PERSISTENT_CHANNELS;
   const envGuilds = process.env.OCTOPAL_DISCORD_GUILDS;
   if (envBotToken) {
     base.discord = {
       botToken: envBotToken,
       allowedUsers: envAllowedUsers ? envAllowedUsers.split(",").map((s) => s.trim()) : [],
       channels: envChannels ? envChannels.split(",").map((s) => s.trim()) : [],
+      persistentChannels: envPersistentChannels ? envPersistentChannels.split(",").map((s) => s.trim()) : [],
       guilds: envGuilds ? envGuilds.split(",").map((s) => s.trim()) : [],
     };
   }
@@ -232,6 +239,9 @@ export async function loadConfig(): Promise<ResolvedConfig> {
       base.discord.guilds = base.discord.guilds?.length
         ? base.discord.guilds
         : saved.discord.guilds ?? [];
+      base.discord.persistentChannels = base.discord.persistentChannels?.length
+        ? base.discord.persistentChannels
+        : saved.discord.persistentChannels ?? [];
       if (saved.discord.mentionOnReply !== undefined) {
         base.discord.mentionOnReply = saved.discord.mentionOnReply;
       }

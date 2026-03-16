@@ -46,6 +46,7 @@ export class DiscordConnector {
   private client: Client;
   private allowedSet: Set<string>;
   private channelSet: Set<string>;
+  private persistentSet: Set<string>;
   private guildSet: Set<string>;
   private mentionOnReply: boolean;
 
@@ -56,7 +57,9 @@ export class DiscordConnector {
     private drainAttachments?: (sessionId: string) => QueuedAttachment[],
   ) {
     this.allowedSet = new Set(config.allowedUsers);
-    this.channelSet = new Set(config.channels ?? []);
+    this.persistentSet = new Set(config.persistentChannels ?? []);
+    // Include persistent channels in channelSet so Discord tools can access them
+    this.channelSet = new Set([...(config.channels ?? []), ...this.persistentSet]);
     this.guildSet = new Set(config.guilds ?? []);
     this.mentionOnReply = config.mentionOnReply ?? true;
     this.client = new Client({
@@ -296,12 +299,25 @@ export class DiscordConnector {
       return;
     }
 
-    // Message in a configured channel or guild — auto-create thread
+    // Message in a configured channel or guild
     const inGuild = message.guild && this.guildSet.has(message.guild.id);
     if (channelType === ChannelType.GuildText && (this.channelSet.has(message.channel.id) || inGuild)) {
-      await this.handleChannelMessage(message, prompt, attachments);
+      // Persistent channels reply inline — no thread creation
+      if (this.persistentSet.has(message.channel.id)) {
+        await this.handlePersistentChannel(message, prompt, attachments);
+      } else {
+        await this.handleChannelMessage(message, prompt, attachments);
+      }
       return;
     }
+  }
+
+  /** Handle a message in a persistent channel — inline reply, shared session */
+  private async handlePersistentChannel(message: Message, text: string, attachments: FileAttachment[] = []): Promise<void> {
+    const sessionId = `discord-ch-${message.channel.id}`;
+    const channel = message.channel;
+    if (!("send" in channel)) return;
+    await this.replyInChannel(channel, sessionId, text, message.author.id, attachments);
   }
 
   /** Handle a DM message */
