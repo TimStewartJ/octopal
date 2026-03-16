@@ -17,12 +17,30 @@ const log = createLogger("sessions");
 export class SessionStore {
   private sessions = new Map<string, CopilotSession>();
   private extraTools: Tool<any>[] = [];
+  private queues = new Map<string, Promise<any>>();
 
   constructor(private agent: OctopalAgent) {}
 
   /** Register extra tools that will be included in all new sessions */
   setExtraTools(tools: Tool<any>[]): void {
     this.extraTools = tools;
+  }
+
+  /**
+   * Serialize async work per session — if a send is already in flight,
+   * the next one waits for it to finish before starting.
+   */
+  private enqueue<T>(sessionId: string, fn: () => Promise<T>): Promise<T> {
+    const prev = this.queues.get(sessionId) ?? Promise.resolve();
+    const next = prev.then(fn, fn); // run fn regardless of prev success/failure
+    this.queues.set(sessionId, next);
+    // Auto-clean when chain settles and nothing else was appended
+    next.finally(() => {
+      if (this.queues.get(sessionId) === next) {
+        this.queues.delete(sessionId);
+      }
+    });
+    return next;
   }
 
   /** Get an existing session, resume from disk, or create a new one */
@@ -87,6 +105,20 @@ export class SessionStore {
    * Only truly stalled turns (no events for `inactivityTimeoutMs`) will fail.
    */
   async sendOrRecover(
+    sessionId: string,
+    prompt: string,
+    options?: {
+      attachments?: SdkAttachment[];
+      onEvent?: SessionEventHandler;
+      onSource?: (source: Source) => void;
+      inactivityTimeoutMs?: number;
+    },
+  ): Promise<{ response: AssistantMessageEvent | undefined; recovered: boolean }> {
+    return this.enqueue(sessionId, () => this._sendOrRecover(sessionId, prompt, options));
+  }
+
+  /** Internal sendOrRecover — always called through enqueue for serialization */
+  private async _sendOrRecover(
     sessionId: string,
     prompt: string,
     options?: {
