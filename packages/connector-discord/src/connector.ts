@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, Partials, ChannelType, type Message } from "discord.js";
+import { Client, GatewayIntentBits, Partials, ChannelType, SlashCommandBuilder, REST, Routes, InteractionType, type Message, type Interaction } from "discord.js";
 import type { SessionEvent } from "@github/copilot-sdk";
 import { createLogger, type DiscordConfig, type QueuedAttachment, type Source } from "@octopal/core";
 import { splitMessage } from "./messages.js";
@@ -34,6 +34,7 @@ export interface ConnectorSessionStore {
       onSource?: (source: Source) => void;
     },
   ): Promise<{ response: { data?: { content?: string } } | undefined; recovered: boolean }>;
+  destroy(sessionId: string): Promise<void>;
 }
 
 /** Generates a short thread title from a user message */
@@ -85,8 +86,9 @@ export class DiscordConnector {
   }
 
   async start(): Promise<void> {
-    this.client.on("ready", () => {
+    this.client.on("ready", async () => {
       log.info(`Logged in as ${this.client.user?.tag}`);
+      await this.registerSlashCommands();
     });
 
     this.client.on("messageCreate", (message) => {
@@ -95,7 +97,73 @@ export class DiscordConnector {
       });
     });
 
+    this.client.on("interactionCreate", (interaction) => {
+      this.handleInteraction(interaction).catch((err) => {
+        log.error("Error handling interaction:", err);
+      });
+    });
+
     await this.client.login(this.config.botToken);
+  }
+
+  /** Register /reset slash command with Discord */
+  private async registerSlashCommands(): Promise<void> {
+    const command = new SlashCommandBuilder()
+      .setName("reset")
+      .setDescription("Reset the conversation session in this channel/thread");
+
+    try {
+      const rest = new REST().setToken(this.config.botToken);
+      const appId = this.client.user?.id;
+      if (!appId) return;
+
+      // Register per-guild for instant availability
+      for (const guildId of this.guildSet) {
+        await rest.put(Routes.applicationGuildCommands(appId, guildId), {
+          body: [command.toJSON()],
+        });
+      }
+      log.info("Registered /reset slash command");
+    } catch (err) {
+      log.error("Failed to register slash commands:", err);
+    }
+  }
+
+  /** Handle slash command interactions */
+  private async handleInteraction(interaction: Interaction): Promise<void> {
+    if (interaction.type !== InteractionType.ApplicationCommand) return;
+    if (!interaction.isChatInputCommand() || interaction.commandName !== "reset") return;
+
+    // Whitelist check
+    if (!this.allowedSet.has(interaction.user.id)) {
+      await interaction.reply({ content: "You don't have permission to use this command.", ephemeral: true });
+      return;
+    }
+
+    const channel = interaction.channel;
+    if (!channel) {
+      await interaction.reply({ content: "Could not determine channel.", ephemeral: true });
+      return;
+    }
+
+    // Determine session ID based on channel type
+    let sessionId: string;
+    if (channel.type === ChannelType.DM) {
+      sessionId = `discord-dm-${interaction.user.id}`;
+    } else if (channel.type === ChannelType.PublicThread || channel.type === ChannelType.PrivateThread) {
+      sessionId = `discord-th-${channel.id}`;
+    } else {
+      sessionId = `discord-ch-${channel.id}`;
+    }
+
+    try {
+      await this.sessionStore.destroy(sessionId);
+      log.info(`Session ${sessionId} reset via /reset command`);
+      await interaction.reply("🔄 Session reset. Next message starts a fresh conversation.");
+    } catch (err) {
+      log.error(`Failed to reset session ${sessionId}:`, err);
+      await interaction.reply({ content: "Failed to reset session.", ephemeral: true });
+    }
   }
 
   async stop(): Promise<void> {
