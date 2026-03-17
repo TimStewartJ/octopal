@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@octopal/core": "*",
-    "@github/copilot-sdk": "^0.1.23",
+    "@github/copilot-sdk": "^0.1.32",
     "zod": "^4.3.6"
   }
 }
