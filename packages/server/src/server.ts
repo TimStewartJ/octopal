@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import websocket from "@fastify/websocket";
+import { approveAll } from "@github/copilot-sdk";
 import {
   OctopalAgent,
   Scheduler,
@@ -123,6 +124,7 @@ export async function createServer({ config, host, port }: ServerOptions) {
         const titleSession = await agent.client.createSession({
           model: "claude-haiku-4.5",
           tools: [],
+          onPermissionRequest: approveAll,
           systemMessage: {
             mode: "replace",
             content:

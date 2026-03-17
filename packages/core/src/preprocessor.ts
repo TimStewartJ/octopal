@@ -1,4 +1,4 @@
-import { CopilotClient } from "@github/copilot-sdk";
+import { CopilotClient, approveAll } from "@github/copilot-sdk";
 import type { VaultManager } from "./vault.js";
 import {
   getCachedAliasLookup,
@@ -208,6 +208,7 @@ async function runSemanticMatch(
 
   const session = await client.createSession({
     model: "claude-haiku-4.5",
+    onPermissionRequest: approveAll,
     systemMessage: {
       mode: "replace",
       content: PREPROCESSOR_PROMPT,

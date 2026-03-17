@@ -1,4 +1,5 @@
 import type { CopilotClient } from "@github/copilot-sdk";
+import { approveAll } from "@github/copilot-sdk";
 import type { VaultManager } from "./vault.js";
 import type { KnowledgeOperation } from "./hooks.js";
 import { createLogger } from "./log.js";
@@ -79,6 +80,7 @@ export async function writeDiaryEntry(
   try {
     const session = await client.createSession({
       model: "claude-haiku-4.5",
+      onPermissionRequest: approveAll,
       systemMessage: { mode: "replace", content: DIARY_SUMMARY_PROMPT },
     });
     try {
@@ -156,6 +158,7 @@ export async function generateObservations(
 
     const session = await client.createSession({
       model: "claude-haiku-4.5",
+      onPermissionRequest: approveAll,
       systemMessage: { mode: "replace", content: OBSERVATION_PROMPT },
     });
     try {

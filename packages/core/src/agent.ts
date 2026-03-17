@@ -1,4 +1,4 @@
-import { CopilotClient, CopilotSession } from "@github/copilot-sdk";
+import { CopilotClient, CopilotSession, approveAll } from "@github/copilot-sdk";
 import type { SessionEventHandler } from "@github/copilot-sdk";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
@@ -203,6 +203,7 @@ export class OctopalAgent {
       model: this.config.model ?? "claude-sonnet-4",
       streaming: true,
       workingDirectory: this.vault.root,
+      onPermissionRequest: approveAll,
       systemMessage: {
         mode: "append",
         content: promptContent,
@@ -277,6 +278,7 @@ export class OctopalAgent {
     });
 
     const session = await this.client.resumeSession(options.sessionId, {
+      onPermissionRequest: approveAll,
       tools: [
         ...buildVaultTools({
           vault: this.vault,
