@@ -383,7 +383,7 @@ export class OctopalAgent {
     try {
       return await this.sendAndWait(session, prompt);
     } finally {
-      await session.destroy();
+      await session.disconnect();
     }
   }
 }

@@ -5,7 +5,7 @@ import * as path from "node:path";
 import * as readline from "node:readline/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { CopilotClient } from "@github/copilot-sdk";
+import { CopilotClient, approveAll } from "@github/copilot-sdk";
 import {
   VaultManager,
   ParaManager,
@@ -196,6 +196,7 @@ async function main() {
   const session = await client.createSession({
     model: "claude-sonnet-4",
     workingDirectory: config.vaultPath,
+    onPermissionRequest: approveAll,
     systemMessage: {
       mode: "append",
       content: `${SETUP_PROMPT}\n\n## Current Vault Structure\n\`\`\`\n${vaultStructure}\n\`\`\`\n\nToday's date: ${new Date().toISOString().slice(0, 10)}`,
@@ -256,7 +257,7 @@ async function main() {
     `  Run 'octopal ingest \"your notes\"' to add content via the agent.\n`,
   );
 
-  await session.destroy();
+  await session.disconnect();
   await client.stop();
   rl.close();
 }

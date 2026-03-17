@@ -94,7 +94,7 @@ export class BackgroundTaskManager extends EventEmitter<BackgroundTaskEvents> {
     const session = this.sessions.get(runId);
     if (session) {
       session.abort().catch(() => {});
-      session.destroy().catch(() => {});
+      session.disconnect().catch(() => {});
       this.sessions.delete(runId);
     }
 
@@ -175,7 +175,7 @@ export class BackgroundTaskManager extends EventEmitter<BackgroundTaskEvents> {
     } finally {
       this.sessions.delete(run.runId);
       if (session) {
-        session.destroy().catch(() => {});
+        session.disconnect().catch(() => {});
       }
     }
   }

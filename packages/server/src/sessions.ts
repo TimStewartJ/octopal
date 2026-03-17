@@ -80,7 +80,7 @@ export class SessionStore {
   async destroy(sessionId: string): Promise<void> {
     const session = this.sessions.get(sessionId);
     if (session) {
-      await session.destroy();
+      await session.disconnect();
       this.sessions.delete(sessionId);
     }
     this.agent.cleanupSession(sessionId);
@@ -292,7 +292,7 @@ export class SessionStore {
   async destroyAll(): Promise<void> {
     for (const [id, session] of this.sessions) {
       try {
-        await session.destroy();
+        await session.disconnect();
       } catch {
         // Best-effort cleanup
       }

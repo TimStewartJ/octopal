@@ -231,6 +231,6 @@ async function runSemanticMatch(
       newEntities: parsed.newEntities || [],
     };
   } finally {
-    await session.destroy();
+    await session.disconnect();
   }
 }

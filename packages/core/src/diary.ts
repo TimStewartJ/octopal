@@ -112,7 +112,7 @@ export async function writeDiaryEntry(
       await vault.appendToFile(monthFile, entry);
       doneDiary();
     } finally {
-      await session.destroy();
+      await session.disconnect();
     }
   } catch (e) {
     doneDiary();
@@ -186,7 +186,7 @@ export async function generateObservations(
       await vault.appendToFile(obsPath, entry);
       doneObs();
     } finally {
-      await session.destroy();
+      await session.disconnect();
     }
   } catch (e) {
     doneObs();

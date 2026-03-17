@@ -138,7 +138,7 @@ export async function createServer({ config, host, port }: ServerOptions) {
           const resp = await titleSession.sendAndWait({ prompt: messageText }, 15_000);
           return (resp?.data?.content ?? messageText.slice(0, 50)).trim();
         } finally {
-          await titleSession.destroy();
+          await titleSession.disconnect();
         }
       },
     };
