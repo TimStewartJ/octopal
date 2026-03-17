@@ -10,6 +10,26 @@ import { randomUUID } from "node:crypto";
 
 const log = createLogger("discord");
 
+const RETRYABLE_CODES = new Set(["UND_ERR_SOCKET", "ECONNRESET", "ETIMEDOUT", "EPIPE", "EAI_AGAIN"]);
+
+/** Retry a Discord channel.send() once on transient network errors */
+async function sendWithRetry(
+  channel: { send(options: any): Promise<any> },
+  options: any,
+  retries = 1,
+): Promise<any> {
+  try {
+    return await channel.send(options);
+  } catch (err: any) {
+    if (retries > 0 && RETRYABLE_CODES.has(err?.code)) {
+      log.info(`Retrying send after ${err.code}, ${retries} attempt(s) left`);
+      await new Promise((r) => setTimeout(r, 1_000));
+      return sendWithRetry(channel, options, retries - 1);
+    }
+    throw err;
+  }
+}
+
 /** Minimal session interface — avoids circular dependency on @octopal/server */
 export interface ConnectorSession {
   sendAndWait(message: { prompt: string }, timeoutMs: number): Promise<{ data?: { content?: string } } | undefined>;
@@ -184,7 +204,7 @@ export class DiscordConnector {
     const attachments = this.drainAttachments(sessionId);
     for (const att of attachments) {
       try {
-        await channel.send({
+        await sendWithRetry(channel, {
           content: att.caption ?? "",
           files: [{ attachment: att.path }],
         });
@@ -400,7 +420,7 @@ export class DiscordConnector {
 
       if (recovered) {
         log.info(`Session ${sessionId} recovered after expiry`);
-        await channel.send("⚡ *Session refreshed — conversation history was reset.*").catch(() => {});
+        await sendWithRetry(channel, "⚡ *Session refreshed — conversation history was reset.*").catch(() => {});
       }
 
       if (!responseText) return;
@@ -409,7 +429,7 @@ export class DiscordConnector {
       for (let i = 0; i < chunks.length; i++) {
         const isLast = i === chunks.length - 1;
         const suffix = isLast && this.mentionOnReply ? `\n\n<@${authorId}>` : "";
-        await channel.send(`${chunks[i]}${suffix}`);
+        await sendWithRetry(channel, `${chunks[i]}${suffix}`);
       }
 
       await this.sendQueuedAttachments(channel, sessionId);
@@ -417,7 +437,7 @@ export class DiscordConnector {
       const errMsg = err instanceof Error ? err.message : String(err);
       log.error(`Session ${sessionId} error:`, errMsg);
       await renderer.finishWithError(errMsg).catch(() => {});
-      await channel.send("Sorry, something went wrong processing your message.").catch(() => {});
+      await sendWithRetry(channel, "Sorry, something went wrong processing your message.").catch(() => {});
     }
   }
 
@@ -447,7 +467,7 @@ export class DiscordConnector {
 
       if (recovered) {
         log.info(`Session ${sessionId} recovered after expiry`);
-        await channel.send("⚡ *Session refreshed — conversation history was reset.*").catch(() => {});
+        await sendWithRetry(channel, "⚡ *Session refreshed — conversation history was reset.*").catch(() => {});
       }
 
       if (!responseText) return;
@@ -456,7 +476,7 @@ export class DiscordConnector {
       for (let i = 0; i < chunks.length; i++) {
         const isLast = i === chunks.length - 1;
         const suffix = isLast && this.mentionOnReply ? `\n\n<@${authorId}>` : "";
-        await channel.send(`${chunks[i]}${suffix}`);
+        await sendWithRetry(channel, `${chunks[i]}${suffix}`);
       }
 
       await this.sendQueuedAttachments(channel, sessionId);
@@ -464,7 +484,7 @@ export class DiscordConnector {
       const errMsg = err instanceof Error ? err.message : String(err);
       log.error(`Session ${sessionId} error:`, errMsg);
       await renderer.finishWithError(errMsg).catch(() => {});
-      await channel.send("Sorry, something went wrong processing your message.").catch(() => {});
+      await sendWithRetry(channel, "Sorry, something went wrong processing your message.").catch(() => {});
     } finally {
       clearInterval(typingInterval);
     }
