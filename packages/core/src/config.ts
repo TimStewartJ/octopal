@@ -52,6 +52,8 @@ export interface OctopalUserConfig {
   logLevel?: string;
   /** LLM model to use (default: claude-sonnet-4) */
   model?: string;
+  /** Default timeout for LLM calls in ms (default: 300000 = 5 minutes) */
+  llmTimeoutMs?: number;
   /** Server configuration */
   server?: ServerConfig;
   /** Scheduler configuration */
@@ -71,6 +73,8 @@ export interface ResolvedConfig {
   logLevel?: string;
   /** LLM model to use (default: claude-sonnet-4) */
   model: string;
+  /** Default timeout for LLM calls in ms (default: 300000 = 5 minutes) */
+  llmTimeoutMs?: number;
   server: {
     port: number;
     passwordHash?: string;
@@ -92,6 +96,9 @@ export const CONFIG_TEMPLATE = `# Octopal configuration
 
 # LLM model to use (default: claude-sonnet-4)
 # model = "claude-sonnet-4"
+
+# Default timeout for LLM calls in milliseconds (default: 300000 = 5 minutes)
+# llmTimeoutMs = 300000
 
 # Base URL for the web vault viewer (code-server)
 # When set, the agent formats note references as clickable links
@@ -217,6 +224,9 @@ export async function loadConfig(): Promise<ResolvedConfig> {
     }
     if (saved.model) {
       base.model = saved.model;
+    }
+    if (saved.llmTimeoutMs) {
+      base.llmTimeoutMs = saved.llmTimeoutMs;
     }
     if (saved.server) {
       base.server.port = saved.server.port ?? base.server.port;

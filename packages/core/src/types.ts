@@ -20,6 +20,8 @@ export interface OctopalConfig {
   vaultPathPrefix?: string;
   /** LLM model to use (default: claude-sonnet-4) */
   model?: string;
+  /** Default timeout for LLM calls in ms (default: 300000 = 5 minutes) */
+  llmTimeoutMs?: number;
 }
 
 export interface NoteMetadata {

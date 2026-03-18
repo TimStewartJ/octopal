@@ -369,7 +369,7 @@ export class OctopalAgent {
   async sendAndWait(
     session: CopilotSession,
     prompt: string,
-    timeout = 300_000,
+    timeout = this.config.llmTimeoutMs ?? 300_000,
   ): Promise<string> {
     const done = log.timed("LLM call", "info");
     const response = await session.sendAndWait({ prompt }, timeout);
