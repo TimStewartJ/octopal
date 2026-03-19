@@ -199,7 +199,9 @@ export class SessionLogger {
           : tc.result;
         if (output) {
           const truncated = truncate(output, MAX_TOOL_RESULT_LENGTH);
-          line += "\n  > " + truncated.replace(/\n/g, "\n  > ");
+          // Escape HTML comments to prevent markdown processors from parsing them as real HTML
+          const escaped = truncated.replace(/<!--/g, "&lt;!--").replace(/-->/g, "--&gt;");
+          line += "\n  > " + escaped.replace(/\n/g, "\n  > ");
         }
         lines.push(line);
 
