@@ -1,0 +1,52 @@
+diff --git a/node_modules/@github/copilot/definitions/code-review.agent.yaml b/node_modules/@github/copilot/definitions/code-review.agent.yaml
+index 23924d0..8bbcd76 100644
+--- a/node_modules/@github/copilot/definitions/code-review.agent.yaml
++++ b/node_modules/@github/copilot/definitions/code-review.agent.yaml
+@@ -4,7 +4,7 @@ description: >
+   Reviews code changes with extremely high signal-to-noise ratio. Analyzes staged/unstaged
+   changes and branch diffs. Only surfaces issues that genuinely matter - bugs, security
+   issues, logic errors. Never comments on style, formatting, or trivial matters.
+-model: claude-sonnet-4.5
++model: gpt-5.4
+ tools:
+   - "*"
+ promptParts:
+diff --git a/node_modules/@github/copilot/definitions/explore.agent.yaml b/node_modules/@github/copilot/definitions/explore.agent.yaml
+index 7f65a41..d00ca28 100644
+--- a/node_modules/@github/copilot/definitions/explore.agent.yaml
++++ b/node_modules/@github/copilot/definitions/explore.agent.yaml
+@@ -4,7 +4,7 @@ description: >
+   Fast codebase exploration and answering questions. Uses code intelligence, grep, glob, view, bash/powershell
+   tools in a separate context window to search files and understand code structure.
+   Safe to call in parallel.
+-model: claude-haiku-4.5
++model: gpt-5.4
+ tools:
+   - grep
+   - glob
+diff --git a/node_modules/@github/copilot/definitions/research.agent.yaml b/node_modules/@github/copilot/definitions/research.agent.yaml
+index 55001c5..32715c8 100644
+--- a/node_modules/@github/copilot/definitions/research.agent.yaml
++++ b/node_modules/@github/copilot/definitions/research.agent.yaml
+@@ -4,7 +4,7 @@ description: >
+   Staff software engineer and software research specialist that provides exhaustive,
+   meticulously researched answers about codebases, APIs, libraries, and software
+   architecture using GitHub's search and exploration tools.
+-model: claude-sonnet-4.6
++model: gpt-5.4
+ tools:
+   # GitHub MCP tools (using short 'github/' prefix which maps to 'github-mcp-server/')
+   - github/get_me # IMPORTANT: Use this first to understand user context and org
+diff --git a/node_modules/@github/copilot/definitions/task.agent.yaml b/node_modules/@github/copilot/definitions/task.agent.yaml
+index 3d842f4..5c60c0d 100644
+--- a/node_modules/@github/copilot/definitions/task.agent.yaml
++++ b/node_modules/@github/copilot/definitions/task.agent.yaml
+@@ -4,7 +4,7 @@ description: >
+   Execute development commands like tests, builds, linters, and formatters.
+   Returns brief summary on success, full output on failure. Keeps main context
+   clean by minimizing verbose output.
+-model: claude-haiku-4.5
++model: gpt-5.4
+ tools:
+   - "*"
+ promptParts:
