@@ -131,7 +131,7 @@ export class OctopalAgent {
       // No diary
     }
 
-    let promptContent = `${SYSTEM_PROMPT}\n\n## Current Vault Structure\n\`\`\`\n${vaultStructure}\n\`\`\``;
+    let promptContent = `## Current Vault Structure\n\`\`\`\n${vaultStructure}\n\`\`\``;
     if (identity) {
       promptContent += `\n\n## About the User\n${identity}`;
     }
@@ -205,7 +205,11 @@ export class OctopalAgent {
       workingDirectory: this.vault.root,
       onPermissionRequest: approveAll,
       systemMessage: {
-        mode: "append",
+        mode: "customize",
+        sections: {
+          identity: { action: "replace", content: SYSTEM_PROMPT },
+          code_change_rules: { action: "remove" },
+        },
         content: promptContent,
       },
       hooks,
