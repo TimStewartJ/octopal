@@ -78,6 +78,22 @@ export function buildSessionHooks(opts: {
       const doneHook = log.timed("onUserPromptSubmitted");
       const sections: string[] = [];
 
+      // Inject local time so the model knows the actual wall-clock time
+      // (the SDK injects current_datetime in UTC which can mislead time reasoning)
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const now = new Date();
+      const localTime = now.toLocaleString("en-US", {
+        timeZone: tz,
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      });
+      sections.push(`## Current Local Time\n${localTime} (${tz})`);
+
       // Clear sources from previous turn
       sourceCollector?.clear();
 
