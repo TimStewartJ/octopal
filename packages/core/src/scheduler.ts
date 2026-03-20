@@ -38,6 +38,7 @@ export class Scheduler {
   private running = false;
   private executing = false;
   private extraTools: import("@github/copilot-sdk").Tool<any>[] = [];
+  private tickCount = 0;
 
   constructor(options: SchedulerOptions) {
     this.agent = options.agent;
@@ -94,6 +95,11 @@ export class Scheduler {
     }
 
     log.info(`Loaded ${this.tasks.size} schedule(s)`);
+    for (const task of this.tasks.values()) {
+      if (!task.enabled) continue;
+      const sched = task.once ? `once at ${task.once}` : task.schedule;
+      log.info(`  → "${task.name}" (${task.id}): ${sched}${task.builtin ? " [builtin]" : ""}`);
+    }
   }
 
   /** Start the tick loop */
@@ -137,11 +143,20 @@ export class Scheduler {
   private async tick(): Promise<void> {
     if (!this.running) return;
 
+    this.tickCount++;
+
     try {
       if (this.executing) {
-        // Previous execution still running — skip this tick
+        log.warn("Skipping tick — previous task still executing");
         return;
       }
+
+      // Heartbeat every 30 ticks (~30 min at 60s interval)
+      if (this.tickCount % 30 === 0) {
+        const enabled = [...this.tasks.values()].filter((t) => t.enabled).length;
+        log.info(`Heartbeat: ${enabled} active schedule(s), tick #${this.tickCount}`);
+      }
+
       await this.checkAndExecute();
     } catch (err) {
       log.error("Tick error:", err);
@@ -211,36 +226,41 @@ export class Scheduler {
         summary = response.slice(0, 500);
       }
       success = true;
-      log.info(`"${task.name}" completed`);
+      const elapsed = ((Date.now() - new Date(startedAt).getTime()) / 1000).toFixed(1);
+      log.info(`"${task.name}" completed (${elapsed}s)`);
     } catch (err) {
       summary = err instanceof Error ? err.message : String(err);
       log.error(`"${task.name}" failed:`, summary);
-    }
+    } finally {
+      const finishedAt = new Date().toISOString();
+      task.lastRun = finishedAt;
 
-    const finishedAt = new Date().toISOString();
-    task.lastRun = finishedAt;
-
-    // Log to history
-    await this.appendHistory({
-      taskId: task.id,
-      taskName: task.name,
-      startedAt,
-      finishedAt,
-      success,
-      summary,
-    });
-
-    // Clean up one-off tasks
-    if (task.once) {
+      // Log to history (best-effort — don't let this deadlock the scheduler)
       try {
-        await this.vault.deleteFile(path.join(SCHEDULES_DIR, `${task.id}.toml`));
-      } catch {
-        // Best effort
+        await this.appendHistory({
+          taskId: task.id,
+          taskName: task.name,
+          startedAt,
+          finishedAt,
+          success,
+          summary,
+        });
+      } catch (err) {
+        log.error("Failed to write schedule history:", err);
       }
-      this.tasks.delete(task.id);
-    }
 
-    this.executing = false;
+      // Clean up one-off tasks
+      if (task.once) {
+        try {
+          await this.vault.deleteFile(path.join(SCHEDULES_DIR, `${task.id}.toml`));
+        } catch {
+          // Best effort
+        }
+        this.tasks.delete(task.id);
+      }
+
+      this.executing = false;
+    }
   }
 
   private async executeBuiltin(prompt: string): Promise<string> {
