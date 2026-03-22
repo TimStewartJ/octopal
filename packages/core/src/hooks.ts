@@ -17,6 +17,7 @@ type SessionHooks = NonNullable<SessionConfig["hooks"]>;
 /** Tools whose results are rich enough to warrant entity detection */
 const PHASE2_TOOLS = new Set([
   "web_fetch",
+  "browse_url",
   "discord_read_channel",
   "remote_execute",
 ]);
