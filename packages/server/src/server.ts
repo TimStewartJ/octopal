@@ -39,6 +39,7 @@ export async function createServer({ config, host, port }: ServerOptions) {
     vaultPathPrefix: config.vaultPathPrefix,
     model: config.model,
     llmTimeoutMs: config.llmTimeoutMs,
+    diary: config.diary,
   });
   await agent.init();
 

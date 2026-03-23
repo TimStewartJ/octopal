@@ -123,12 +123,17 @@ export class OctopalAgent {
       // No observations file
     }
 
-    // Load recent diary entries
+    // Load recent diary entries (if configured)
     let diary = "";
-    try {
-      diary = await getRecentDiary(this.vault);
-    } catch {
-      // No diary
+    if (this.config.diary?.injectOnSessionStart !== false) {
+      try {
+        diary = await getRecentDiary(this.vault, {
+          maxInjectBytes: this.config.diary?.maxInjectBytes,
+          recentFileCount: this.config.diary?.recentFileCount,
+        });
+      } catch {
+        // No diary
+      }
     }
 
     let promptContent = `## Current Vault Structure\n\`\`\`\n${vaultStructure}\n\`\`\``;
@@ -197,6 +202,8 @@ export class OctopalAgent {
       backgroundTasks: this.backgroundTasks,
       sessionId: options?.sessionId,
       sourceCollector,
+      writeOnSessionEnd: this.config.diary?.writeOnSessionEnd,
+      summaryModel: this.config.diary?.summaryModel,
     });
 
     const session = await this.client.createSession({
@@ -280,6 +287,8 @@ export class OctopalAgent {
       backgroundTasks: this.backgroundTasks,
       sessionId: options.sessionId,
       sourceCollector,
+      writeOnSessionEnd: this.config.diary?.writeOnSessionEnd,
+      summaryModel: this.config.diary?.summaryModel,
     });
 
     const session = await this.client.resumeSession(options.sessionId, {

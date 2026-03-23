@@ -60,8 +60,14 @@ export function buildSessionHooks(opts: {
   sessionId?: string;
   /** Source collector — if provided, emits sources for each matched entry */
   sourceCollector?: TurnSourceCollector;
+  /** Whether to write diary entries and observations on session end (default: true) */
+  writeOnSessionEnd?: boolean;
+  /** Model used for diary summary and observation generation */
+  summaryModel?: string;
 }): SessionHooks {
   const { client, vault, qmd, knowledgeOps, logger, backgroundTasks, sessionId, sourceCollector } = opts;
+  const writeOnSessionEnd = opts.writeOnSessionEnd !== false;
+  const summaryModel = opts.summaryModel;
   let aliasesModified = false;
   const toolSummaries: string[] = [];
 
@@ -371,22 +377,24 @@ export function buildSessionHooks(opts: {
         }
       }
 
-      // Write diary entry and generate observations (fire-and-forget in parallel)
-      const sessionData = { knowledgeOps, toolSummaries, sessionId };
-      await Promise.all([
-        writeDiaryEntry(client, vault, sessionData).catch((e) =>
-          log.warn("Failed to write diary entry", e),
-        ),
-        generateObservations(client, vault, sessionData).catch((e) =>
-          log.warn("Failed to generate observations", e),
-        ),
-      ]);
-      // Commit diary and observations if anything was written
-      if (toolSummaries.length > 0 || knowledgeOps.length > 0) {
-        try {
-          await vault.commitAndPush("session diary + observations");
-        } catch (e) {
-          log.warn("Failed to commit diary/observations", e);
+      // Write diary entry and generate observations (if enabled, fire-and-forget in parallel)
+      if (writeOnSessionEnd) {
+        const sessionData = { knowledgeOps, toolSummaries, sessionId };
+        await Promise.all([
+          writeDiaryEntry(client, vault, sessionData, summaryModel).catch((e) =>
+            log.warn("Failed to write diary entry", e),
+          ),
+          generateObservations(client, vault, sessionData, summaryModel).catch((e) =>
+            log.warn("Failed to generate observations", e),
+          ),
+        ]);
+        // Commit diary and observations if anything was written
+        if (toolSummaries.length > 0 || knowledgeOps.length > 0) {
+          try {
+            await vault.commitAndPush("session diary + observations");
+          } catch (e) {
+            log.warn("Failed to commit diary/observations", e);
+          }
         }
       }
     },

@@ -7,7 +7,9 @@ import { createLogger } from "./log.js";
 const log = createLogger("diary");
 
 const DIARY_DIR = "Meta/diary";
-const MAX_INJECT_BYTES = 4096;
+const DEFAULT_MAX_INJECT_BYTES = 4096;
+const DEFAULT_RECENT_FILE_COUNT = 3;
+const DEFAULT_SUMMARY_MODEL = "claude-haiku-4.5";
 
 const DIARY_SUMMARY_PROMPT = `You are summarizing a session for a personal assistant's diary. Given the session data below, produce 5-10 concise bullet points covering:
 
@@ -50,6 +52,7 @@ export async function writeDiaryEntry(
     toolSummaries: string[];
     sessionId?: string;
   },
+  summaryModel = DEFAULT_SUMMARY_MODEL,
 ): Promise<void> {
   const { knowledgeOps, toolSummaries, sessionId } = sessionData;
 
@@ -79,7 +82,7 @@ export async function writeDiaryEntry(
 
   try {
     const session = await client.createSession({
-      model: "claude-haiku-4.5",
+      model: summaryModel,
       onPermissionRequest: approveAll,
       systemMessage: { mode: "replace", content: DIARY_SUMMARY_PROMPT },
     });
@@ -131,6 +134,7 @@ export async function generateObservations(
     knowledgeOps: KnowledgeOperation[];
     toolSummaries: string[];
   },
+  summaryModel = DEFAULT_SUMMARY_MODEL,
 ): Promise<void> {
   const { knowledgeOps, toolSummaries } = sessionData;
 
@@ -157,7 +161,7 @@ export async function generateObservations(
     }
 
     const session = await client.createSession({
-      model: "claude-haiku-4.5",
+      model: summaryModel,
       onPermissionRequest: approveAll,
       systemMessage: { mode: "replace", content: OBSERVATION_PROMPT },
     });
@@ -198,7 +202,12 @@ export async function generateObservations(
  * Read recent diary entries for injection at session start.
  * Returns formatted diary text, capped at MAX_INJECT_BYTES.
  */
-export async function getRecentDiary(vault: VaultManager): Promise<string> {
+export async function getRecentDiary(
+  vault: VaultManager,
+  opts?: { maxInjectBytes?: number; recentFileCount?: number },
+): Promise<string> {
+  const maxBytes = opts?.maxInjectBytes ?? DEFAULT_MAX_INJECT_BYTES;
+  const fileCount = opts?.recentFileCount ?? DEFAULT_RECENT_FILE_COUNT;
   try {
     const files = await vault.listDir(DIARY_DIR);
     const mdFiles = files.filter((f) => f.endsWith(".md")).sort().reverse();
@@ -206,7 +215,7 @@ export async function getRecentDiary(vault: VaultManager): Promise<string> {
     if (mdFiles.length === 0) return "";
 
     let combined = "";
-    for (const file of mdFiles.slice(0, 3)) {
+    for (const file of mdFiles.slice(0, fileCount)) {
       try {
         const content = await vault.readFile(`${DIARY_DIR}/${file}`);
         // Extract entries (## headers with their bullets), skip the file title
@@ -214,8 +223,8 @@ export async function getRecentDiary(vault: VaultManager): Promise<string> {
         // Entries are chronological in file; reverse to get newest first
         for (const entry of entries.reverse()) {
           const formatted = `## ${entry}`;
-          if (combined.length + formatted.length > MAX_INJECT_BYTES) {
-            return combined || formatted.slice(0, MAX_INJECT_BYTES);
+          if (combined.length + formatted.length > maxBytes) {
+            return combined || formatted.slice(0, maxBytes);
           }
           combined += formatted;
         }

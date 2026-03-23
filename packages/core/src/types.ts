@@ -22,6 +22,14 @@ export interface OctopalConfig {
   model?: string;
   /** Default timeout for LLM calls in ms (default: 300000 = 5 minutes) */
   llmTimeoutMs?: number;
+  /** Diary / recent session summary configuration */
+  diary?: {
+    injectOnSessionStart: boolean;
+    writeOnSessionEnd: boolean;
+    maxInjectBytes: number;
+    recentFileCount: number;
+    summaryModel: string;
+  };
 }
 
 export interface NoteMetadata {

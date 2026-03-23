@@ -26,6 +26,19 @@ export interface SchedulerConfig {
   tickIntervalSeconds?: number;
 }
 
+export interface DiaryConfig {
+  /** Whether to inject recent session summaries into the system prompt (default: true) */
+  injectOnSessionStart?: boolean;
+  /** Whether to write a diary entry when a session ends (default: true) */
+  writeOnSessionEnd?: boolean;
+  /** Max bytes of diary text to inject into the system prompt (default: 4096) */
+  maxInjectBytes?: number;
+  /** Number of recent monthly diary files to scan for injection (default: 3) */
+  recentFileCount?: number;
+  /** Model used for generating diary summaries and observations (default: "claude-haiku-4.5") */
+  summaryModel?: string;
+}
+
 export interface DiscordConfig {
   /** Discord bot token */
   botToken: string;
@@ -58,6 +71,8 @@ export interface OctopalUserConfig {
   server?: ServerConfig;
   /** Scheduler configuration */
   scheduler?: SchedulerConfig;
+  /** Diary / recent session summary configuration */
+  diary?: DiaryConfig;
   /** Discord connector configuration */
   discord?: DiscordConfig;
 }
@@ -83,6 +98,13 @@ export interface ResolvedConfig {
   scheduler: {
     enabled: boolean;
     tickIntervalSeconds: number;
+  };
+  diary: {
+    injectOnSessionStart: boolean;
+    writeOnSessionEnd: boolean;
+    maxInjectBytes: number;
+    recentFileCount: number;
+    summaryModel: string;
   };
   discord?: DiscordConfig;
 }
@@ -129,6 +151,22 @@ export const CONFIG_TEMPLATE = `# Octopal configuration
 # How often the scheduler checks for due tasks, in seconds (default: 60)
 # tickIntervalSeconds = 60
 
+[diary]
+# Whether to inject recent session summaries into the system prompt (default: true)
+# injectOnSessionStart = true
+
+# Whether to write a diary entry when a session ends (default: true)
+# writeOnSessionEnd = true
+
+# Max bytes of diary text to inject into the system prompt (default: 4096)
+# maxInjectBytes = 4096
+
+# Number of recent monthly diary files to scan for injection (default: 3)
+# recentFileCount = 3
+
+# Model used for generating diary summaries and observations (default: "claude-haiku-4.5")
+# summaryModel = "claude-haiku-4.5"
+
 [discord]
 # Bot token for the Discord connector
 # botToken = ""
@@ -155,6 +193,13 @@ export async function loadConfig(): Promise<ResolvedConfig> {
     scheduler: {
       enabled: true,
       tickIntervalSeconds: 60,
+    },
+    diary: {
+      injectOnSessionStart: true,
+      writeOnSessionEnd: true,
+      maxInjectBytes: 4096,
+      recentFileCount: 3,
+      summaryModel: "claude-haiku-4.5",
     },
   };
 
@@ -236,6 +281,13 @@ export async function loadConfig(): Promise<ResolvedConfig> {
     if (saved.scheduler) {
       base.scheduler.enabled = saved.scheduler.enabled ?? base.scheduler.enabled;
       base.scheduler.tickIntervalSeconds = saved.scheduler.tickIntervalSeconds ?? base.scheduler.tickIntervalSeconds;
+    }
+    if (saved.diary) {
+      base.diary.injectOnSessionStart = saved.diary.injectOnSessionStart ?? base.diary.injectOnSessionStart;
+      base.diary.writeOnSessionEnd = saved.diary.writeOnSessionEnd ?? base.diary.writeOnSessionEnd;
+      base.diary.maxInjectBytes = saved.diary.maxInjectBytes ?? base.diary.maxInjectBytes;
+      base.diary.recentFileCount = saved.diary.recentFileCount ?? base.diary.recentFileCount;
+      base.diary.summaryModel = saved.diary.summaryModel ?? base.diary.summaryModel;
     }
     if (saved.discord) {
       base.discord ??= { botToken: saved.discord.botToken, allowedUsers: [], channels: [], guilds: [] };
