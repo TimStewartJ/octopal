@@ -436,7 +436,11 @@ export class DiscordConnector {
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err);
       log.error(`Session ${sessionId} error:`, errMsg);
-      await renderer.finishWithError(errMsg).catch(() => {});
+      try {
+        await renderer.finishWithError(errMsg);
+      } catch (renderErr) {
+        log.error(`Session ${sessionId} renderer.finishWithError also failed:`, renderErr);
+      }
       await sendWithRetry(channel, "Sorry, something went wrong processing your message.").catch(() => {});
     }
   }
@@ -483,7 +487,11 @@ export class DiscordConnector {
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err);
       log.error(`Session ${sessionId} error:`, errMsg);
-      await renderer.finishWithError(errMsg).catch(() => {});
+      try {
+        await renderer.finishWithError(errMsg);
+      } catch (renderErr) {
+        log.error(`Session ${sessionId} renderer.finishWithError also failed:`, renderErr);
+      }
       await sendWithRetry(channel, "Sorry, something went wrong processing your message.").catch(() => {});
     } finally {
       clearInterval(typingInterval);

@@ -36,6 +36,7 @@ interface SubagentEntry {
 const MAX_FIELD_LENGTH = 1024;
 const EDIT_DEBOUNCE_MS = 1500;
 const MAX_ARG_VALUE_LENGTH = 80;
+const MAX_RESPONSE_PREVIEW_LENGTH = 200;
 
 /** Format tool arguments as a compact summary string for display */
 function formatToolArgs(args: unknown): string {
@@ -74,18 +75,24 @@ export class DiscordActivityRenderer {
   private tools: ToolEntry[] = [];
   private subagents: SubagentEntry[] = [];
   private sources: Source[] = [];
+  private responsePreview = "";
   private embedMessage: Message | null = null;
   private continuationMessages: Message[] = [];
   private editTimer: ReturnType<typeof setTimeout> | null = null;
   private dirty = false;
   private finished = false;
   private startTime = Date.now();
+  private eventCount = 0;
 
-  constructor(private channel: ActivityChannel) {}
+  constructor(private channel: ActivityChannel) {
+    log.debug("Renderer created");
+  }
 
   /** Feed a SessionEvent; renderer decides what to display */
   async onEvent(event: SessionEvent): Promise<void> {
+    this.eventCount++;
     if (this.finished) return; // Ignore events after completion
+    log.debug(`Event: ${event.type}`);
     switch (event.type) {
       case "assistant.intent":
         this.intent = event.data.intent;
@@ -153,6 +160,29 @@ export class DiscordActivityRenderer {
         break;
       }
 
+      case "assistant.message_delta": {
+        const delta = (event.data as { content?: string }).content ?? "";
+        if (delta) {
+          this.responsePreview += delta;
+          this.scheduleUpdate();
+        }
+        break;
+      }
+
+      case "assistant.message": {
+        const content = (event.data as { content?: string }).content ?? "";
+        if (content) {
+          this.responsePreview = content;
+          this.scheduleUpdate();
+        }
+        break;
+      }
+
+      case "assistant.turn_start":
+        // Reset response preview for each new turn (multi-turn interactions)
+        this.responsePreview = "";
+        break;
+
       case "assistant.turn_end":
         // Don't set finished here — multi-turn interactions have multiple
         // turn_end events. The connector calls flush() or finishWithError()
@@ -183,12 +213,16 @@ export class DiscordActivityRenderer {
 
   /** Mark the turn as successfully completed and flush */
   async finishSuccess(): Promise<void> {
+    const elapsed = ((Date.now() - this.startTime) / 1000).toFixed(1);
+    log.info(`finishSuccess — ${elapsed}s, ${this.eventCount} events, ${this.tools.length} tools, ${this.subagents.length} subagents, ${this.sources.length} sources`);
     this.finished = true;
     await this.flush();
   }
 
   /** Mark the turn as failed and flush (call on timeout/error) */
   async finishWithError(errorMessage?: string): Promise<void> {
+    const elapsed = ((Date.now() - this.startTime) / 1000).toFixed(1);
+    log.warn(`finishWithError — ${elapsed}s, ${this.eventCount} events, error: ${errorMessage ?? "(none)"}`);
     // Mark any still-running tools as failed
     for (const t of this.tools) {
       if (t.status === "running") t.status = "failed";
@@ -215,7 +249,7 @@ export class DiscordActivityRenderer {
     if (!this.dirty && this.embedMessage) return;
     this.dirty = false;
 
-    if (!this.intent && this.tools.length === 0 && this.subagents.length === 0 && this.sources.length === 0) return;
+    if (!this.intent && this.tools.length === 0 && this.subagents.length === 0 && this.sources.length === 0 && !this.responsePreview) return;
 
     const embeds = this.buildEmbeds();
 
@@ -239,7 +273,7 @@ export class DiscordActivityRenderer {
         }
       }
     } catch (err) {
-      log.error("Embed update failed:", err);
+      log.error("Embed update failed:", err, `(embedExists=${!!this.embedMessage}, fields=${this.tools.length} tools, ${this.subagents.length} subagents)`);
     }
   }
 
@@ -247,7 +281,7 @@ export class DiscordActivityRenderer {
   private buildEmbeds(): EmbedBuilder[] {
     const lines = this.buildActivityLines();
 
-    if (lines.length === 0 && this.sources.length === 0) {
+    if (lines.length === 0 && this.sources.length === 0 && !this.responsePreview) {
       return [this.createEmbed("")];
     }
 
@@ -284,6 +318,19 @@ export class DiscordActivityRenderer {
           .setColor(lastEmbed.data.color ?? 0x3498db)
           .addFields({ name: "📚 Context", value: sourcesText.slice(0, MAX_FIELD_LENGTH) });
         embeds.push(sourceEmbed);
+      }
+    }
+
+    // Append response preview field if the agent is streaming text
+    if (this.responsePreview && !this.finished) {
+      let preview = this.responsePreview;
+      if (preview.length > MAX_RESPONSE_PREVIEW_LENGTH) {
+        preview = preview.slice(0, MAX_RESPONSE_PREVIEW_LENGTH) + "…";
+      }
+      const lastEmbed = embeds[embeds.length - 1];
+      const existingFields = lastEmbed.data.fields?.length ?? 0;
+      if (existingFields < 25) {
+        lastEmbed.addFields({ name: "💬 Response", value: preview });
       }
     }
 
