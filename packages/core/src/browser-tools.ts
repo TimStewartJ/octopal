@@ -16,19 +16,19 @@ function getPlaywrightCli(): string {
 
 const SESSION_NAME = "octopal";
 const PROFILE_DIR_ENV = "OCTOPAL_BROWSER_PROFILE";
-const DEFAULT_PROFILE = path.join(
-  process.env.HOME ?? process.env.USERPROFILE ?? "/tmp",
-  ".octopal",
-  "browser-profile",
-);
+const HOME_DIR = process.env.HOME ?? process.env.USERPROFILE ?? "/tmp";
+const DEFAULT_PROFILE = path.join(HOME_DIR, ".octopal", "browser-profile");
 const PROFILE_DIR = process.env[PROFILE_DIR_ENV] ?? DEFAULT_PROFILE;
+
+/** Fixed CWD for playwright-cli so snapshot files land in a predictable location */
+const BROWSER_CWD = path.join(HOME_DIR, ".octopal");
 
 /** Run a playwright-cli command and return stdout */
 function runPlaywright(args: string[], timeoutMs = 30_000): Promise<string> {
   return new Promise((resolve, reject) => {
     const cli = getPlaywrightCli();
     log.debug(`exec: ${cli} ${args.join(" ")}`);
-    execFile(cli, args, { timeout: timeoutMs, maxBuffer: 1024 * 1024 * 5 }, (err, stdout, stderr) => {
+    execFile(cli, args, { timeout: timeoutMs, maxBuffer: 1024 * 1024 * 5, cwd: BROWSER_CWD }, (err, stdout, stderr) => {
       if (err) {
         const msg = stderr?.trim() || stdout?.trim() || err.message;
         reject(new Error(msg));
@@ -37,6 +37,34 @@ function runPlaywright(args: string[], timeoutMs = 30_000): Promise<string> {
       }
     });
   });
+}
+
+/** Extract page metadata and resolve snapshot paths from playwright-cli stdout */
+function parsePlaywrightOutput(stdout: string): { url?: string; title?: string; snapshotPath?: string; raw: string } {
+  const urlMatch = stdout.match(/- Page URL:\s*(.+)/);
+  const titleMatch = stdout.match(/- Page Title:\s*(.+)/);
+  const snapshotMatch = stdout.match(/\[Snapshot\]\(([^)]+\.yml)\)/);
+
+  return {
+    url: urlMatch?.[1]?.trim(),
+    title: titleMatch?.[1]?.trim(),
+    snapshotPath: snapshotMatch ? path.resolve(BROWSER_CWD, snapshotMatch[1]) : undefined,
+    raw: stdout,
+  };
+}
+
+/** Format a structured result for browse_url / snapshot actions */
+function formatBrowseResult(parsed: ReturnType<typeof parsePlaywrightOutput>): string {
+  const lines: string[] = [];
+  if (parsed.url) lines.push(`Page: ${parsed.url}`);
+  if (parsed.title) lines.push(`Title: ${parsed.title}`);
+  if (parsed.snapshotPath) {
+    lines.push("");
+    lines.push(`Snapshot: ${parsed.snapshotPath}`);
+    lines.push("Read this file to see page structure with element refs (e.g. e15) for click/fill actions.");
+    lines.push('For plain text content, use browser_action(command: "eval", text: "document.body.innerText").');
+  }
+  return lines.length > 0 ? lines.join("\n") : parsed.raw;
 }
 
 /** Check if a browser session is already running */
@@ -80,11 +108,12 @@ export function buildBrowserTools() {
   return [
     defineTool("browse_url", {
       description:
-        "Open a URL in the browser and return a snapshot of the page content. " +
+        "Open a URL in the browser and return page metadata plus a snapshot file path. " +
         "Use this instead of web_fetch for most websites — it handles JavaScript-rendered pages, " +
         "bot-blocked sites, and pages that require login (persistent cookies are maintained). " +
         "The browser stays open after this call for follow-up interactions via browser_action. " +
-        "Only use web_fetch for simple API/JSON endpoints where a full browser is unnecessary.",
+        "Only use web_fetch for simple API/JSON endpoints where a full browser is unnecessary. " +
+        "The snapshot file contains the page structure with element refs needed for click/fill actions.",
       parameters: z.object({
         url: z.string().describe("The URL to navigate to"),
       }),
@@ -94,7 +123,8 @@ export function buildBrowserTools() {
           await ensureBrowserOpen(url);
           const snapshot = await takeSnapshot();
           done();
-          return snapshot || "Page loaded but snapshot returned empty content.";
+          const parsed = parsePlaywrightOutput(snapshot);
+          return formatBrowseResult(parsed) || "Page loaded but snapshot returned empty content.";
         } catch (err: any) {
           done();
           return `Browser error: ${err.message}`;
@@ -106,7 +136,7 @@ export function buildBrowserTools() {
       description:
         "Interact with the currently open browser page. The browser must already be open " +
         "(via browse_url). Use snapshot to see the current page state and get element refs. " +
-        "Element refs (like e15) come from snapshots — take a new snapshot after navigation or interaction.",
+        "Element refs (like e15) come from snapshot files — take a new snapshot after navigation or interaction.",
       parameters: z.object({
         command: z.enum([
           "snapshot",
@@ -175,6 +205,13 @@ export function buildBrowserTools() {
 
           const result = await runPlaywright(args);
           done();
+
+          // For snapshot command, parse and format like browse_url
+          if (command === "snapshot") {
+            const parsed = parsePlaywrightOutput(result);
+            return formatBrowseResult(parsed) || "Snapshot completed.";
+          }
+
           return result || `${command} completed successfully.`;
         } catch (err: any) {
           done();
