@@ -1,6 +1,7 @@
 import { defineTool } from "@github/copilot-sdk";
 import { z } from "zod";
 import { execFile } from "node:child_process";
+import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createLogger } from "./log.js";
@@ -53,16 +54,32 @@ function parsePlaywrightOutput(stdout: string): { url?: string; title?: string; 
   };
 }
 
-/** Format a structured result for browse_url / snapshot actions */
-function formatBrowseResult(parsed: ReturnType<typeof parsePlaywrightOutput>): string {
+/** Max snapshot content to inline (characters). Large pages get truncated. */
+const MAX_SNAPSHOT_INLINE = 80_000;
+
+/** Format a structured result for browse_url / snapshot actions, inlining snapshot content */
+async function formatBrowseResult(parsed: ReturnType<typeof parsePlaywrightOutput>): Promise<string> {
   const lines: string[] = [];
   if (parsed.url) lines.push(`Page: ${parsed.url}`);
   if (parsed.title) lines.push(`Title: ${parsed.title}`);
   if (parsed.snapshotPath) {
-    lines.push("");
-    lines.push(`Snapshot: ${parsed.snapshotPath}`);
-    lines.push("Read this file to see page structure with element refs (e.g. e15) for click/fill actions.");
-    lines.push('For plain text content, use browser_action(command: "eval", text: "document.body.innerText").');
+    try {
+      let content = await fs.readFile(parsed.snapshotPath, "utf-8");
+      if (content.length > MAX_SNAPSHOT_INLINE) {
+        content = content.slice(0, MAX_SNAPSHOT_INLINE) + "\n…(snapshot truncated)";
+      }
+      lines.push("");
+      lines.push("## Page Snapshot");
+      lines.push("Use element refs (e.g. ref=e15) with browser_action click/fill commands.");
+      lines.push('For plain text content, use browser_action(command: "eval", text: "document.body.innerText").');
+      lines.push("");
+      lines.push(content);
+    } catch (err: any) {
+      log.warn(`Failed to read snapshot file ${parsed.snapshotPath}: ${err.message}`);
+      lines.push("");
+      lines.push(`Snapshot file: ${parsed.snapshotPath}`);
+      lines.push("(Could not read snapshot — use view tool to read it manually)");
+    }
   }
   return lines.length > 0 ? lines.join("\n") : parsed.raw;
 }
@@ -124,7 +141,7 @@ export function buildBrowserTools() {
           const snapshot = await takeSnapshot();
           done();
           const parsed = parsePlaywrightOutput(snapshot);
-          return formatBrowseResult(parsed) || "Page loaded but snapshot returned empty content.";
+          return (await formatBrowseResult(parsed)) || "Page loaded but snapshot returned empty content.";
         } catch (err: any) {
           done();
           return `Browser error: ${err.message}`;
@@ -209,7 +226,7 @@ export function buildBrowserTools() {
           // For snapshot command, parse and format like browse_url
           if (command === "snapshot") {
             const parsed = parsePlaywrightOutput(result);
-            return formatBrowseResult(parsed) || "Snapshot completed.";
+            return (await formatBrowseResult(parsed)) || "Snapshot completed.";
           }
 
           return result || `${command} completed successfully.`;
