@@ -54,8 +54,8 @@ function parsePlaywrightOutput(stdout: string): { url?: string; title?: string; 
   };
 }
 
-/** Max snapshot content to inline (characters). Large pages get truncated. */
-const MAX_SNAPSHOT_INLINE = 80_000;
+/** Max snapshot content to inline (characters). ~20K chars ≈ ~5K tokens. */
+const MAX_SNAPSHOT_INLINE = 20_000;
 
 /** Format a structured result for browse_url / snapshot actions, inlining snapshot content */
 async function formatBrowseResult(parsed: ReturnType<typeof parsePlaywrightOutput>): Promise<string> {
@@ -66,7 +66,7 @@ async function formatBrowseResult(parsed: ReturnType<typeof parsePlaywrightOutpu
     try {
       let content = await fs.readFile(parsed.snapshotPath, "utf-8");
       if (content.length > MAX_SNAPSHOT_INLINE) {
-        content = content.slice(0, MAX_SNAPSHOT_INLINE) + "\n…(snapshot truncated)";
+        content = content.slice(0, MAX_SNAPSHOT_INLINE) + `\n…(snapshot truncated — full file: ${parsed.snapshotPath})`;
       }
       lines.push("");
       lines.push("## Page Snapshot");
